@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Scrape to Markdown",
+  "version": "1.0.0",
+  "description": "Scrape Weibo data and convert pages to Markdown",
+  "action": {
+    "default_title": "Open Scrape Panel"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://weibo.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": ["src/content/index.ts"],
+      "matches": ["<all_urls>"],
+      "run_at": "document_idle"
+    }
+  ]
+}
