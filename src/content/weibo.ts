@@ -4,6 +4,7 @@ export interface WeiboPost {
   content: string;
   publishTime: string;
   link?: string;
+  isRetweet?: boolean;
 }
 
 export class WeiboScraper {
@@ -14,6 +15,9 @@ export class WeiboScraper {
   private observer: MutationObserver | null = null;
   private scrollInterval: any = null;
   
+  private lastScrollHeight = 0;
+  private noHeightChangeCount = 0;
+
   private onData: (data: WeiboPost[]) => void;
   private onFinish: () => void;
 
@@ -32,6 +36,8 @@ export class WeiboScraper {
     this.isRunning = true;
     this.scrapedIds.clear();
     this.count = 0;
+    this.lastScrollHeight = 0;
+    this.noHeightChangeCount = 0;
 
     console.log('[WeiboScraper] Started with limit:', limit);
 
@@ -42,6 +48,21 @@ export class WeiboScraper {
     this.scrollInterval = setInterval(() => {
       if (!this.isRunning) return;
       
+      const currentHeight = document.body.scrollHeight;
+      if (currentHeight === this.lastScrollHeight) {
+          this.noHeightChangeCount++;
+          console.log(`[WeiboScraper] No height change (${this.noHeightChangeCount}/5)`);
+      } else {
+          this.noHeightChangeCount = 0;
+          this.lastScrollHeight = currentHeight;
+      }
+
+      if (this.noHeightChangeCount >= 5) {
+          console.log('[WeiboScraper] Reached bottom or loading stuck. Stopping.');
+          this.stop();
+          return;
+      }
+
       window.scrollTo(0, document.body.scrollHeight);
     }, 2500); // 2.5s for network load
 
@@ -55,6 +76,8 @@ export class WeiboScraper {
         }
       }
       if (shouldScrape) {
+        // Reset height check counter if we see new nodes (content is loading)
+        this.noHeightChangeCount = 0;
         this.scrapeCurrentView();
       }
     });
@@ -142,16 +165,38 @@ export class WeiboScraper {
       }
 
       // --- Time Extraction ---
-      // Strategy 1: Header 'time' attribute (very reliable in new UI)
-      const header = card.querySelector('header');
-      let publishTime = header?.getAttribute('time') || '';
-
-      // Strategy 2: Link with class containing "time"
+      let publishTime = '';
       let timeEl: HTMLElement | null = null;
+
+      // Strategy 1: User specified strict selector (a tag with class starting with/containing "_time" and has title)
+      const specificTimeEl = card.querySelector('a[class*="_time"]');
+      
+      if (specificTimeEl) {
+         console.log('[WeiboDebug] Found Element with class containing "_time":', specificTimeEl.className);
+         console.log('[WeiboDebug] Element Title attribute:', specificTimeEl.getAttribute('title'));
+      } else {
+         console.log('[WeiboDebug] No Element found with class containing "_time" in this card.');
+      }
+
+      if (specificTimeEl && specificTimeEl.hasAttribute('title')) {
+          publishTime = specificTimeEl.getAttribute('title') || '';
+          timeEl = specificTimeEl as HTMLElement;
+          console.log('[WeiboDebug] Strategy 1 (Specific Class) Selected Time:', publishTime);
+      }
+
+      // Strategy 2: Header 'time' attribute
+      if (!publishTime) {
+          const header = card.querySelector('header');
+          publishTime = header?.getAttribute('time') || '';
+          if (publishTime) console.log('[WeiboDebug] Strategy 2 (Header Attribute) Selected Time:', publishTime);
+      }
+
+      // Strategy 3: Generic selectors fallback
       if (!publishTime) {
          timeEl = card.querySelector('a[class*="time"], .from a, .head-info .time, .created_at');
          if (timeEl) {
-            publishTime = timeEl.innerText || timeEl.getAttribute('title') || '';
+            publishTime = timeEl.getAttribute('title') || timeEl.innerText || '';
+            console.log('[WeiboDebug] Strategy 3 (Generic) Selected Time:', publishTime);
          }
       }
 
@@ -167,6 +212,23 @@ export class WeiboScraper {
       }
       if (link && !link.startsWith('http')) link = 'https:' + link;
 
+      // --- Retweet Detection ---
+      // Check for contenttype="original" on the content wrapper or card
+      // If contenttype exists and is NOT 'original', it is likely a retweet (or if it has a forward indicator)
+      let isRetweet = false;
+      const contentNode = card.querySelector('[contenttype]');
+      if (contentNode) {
+          const type = contentNode.getAttribute('contenttype');
+          if (type && type !== 'original') {
+              isRetweet = true;
+          }
+      } else {
+          // Fallback for legacy UI or if attribute missing: check for forwarded content container
+          if (card.querySelector('.feed_list_forwardContent, .wbpro-feed-repost')) {
+              isRetweet = true;
+          }
+      }
+
       // Cleanup
       content = content.replace(/收起|展开/g, '').trim();
       if (!author) author = 'Unknown';
@@ -177,7 +239,8 @@ export class WeiboScraper {
         author: author.trim(),
         content: content,
         publishTime: publishTime.trim(),
-        link
+        link,
+        isRetweet
       };
 
       this.scrapedIds.add(mid);

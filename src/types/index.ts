@@ -4,4 +4,5 @@ export interface WeiboPost {
   content: string;
   publishTime: string;
   link?: string;
+  isRetweet?: boolean;
 }

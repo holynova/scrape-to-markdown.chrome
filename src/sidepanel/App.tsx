@@ -45,6 +45,24 @@ const WeiboView = () => {
   const [posts, setPosts] = useState<WeiboPost[]>([]);
   const [filterKeyword, setFilterKeyword] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [showOriginalOnly, setShowOriginalOnly] = useState(false);
+  
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState('0m 0s');
+
+  useEffect(() => {
+    let interval: any;
+    if (isScraping && startTime) {
+      interval = setInterval(() => {
+        const now = Date.now();
+        const diff = Math.floor((now - startTime) / 1000);
+        const m = Math.floor(diff / 60);
+        const s = diff % 60;
+        setElapsed(`${m}m ${s}s`);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isScraping, startTime]);
 
   useEffect(() => {
     const listener = (message: any) => {
@@ -69,9 +87,11 @@ const WeiboView = () => {
       if (!tab.id) return;
       await chrome.tabs.sendMessage(tab.id, { action: 'WEIBO_START', limit });
       setIsScraping(true);
-    } catch (e) {
+      setStartTime(Date.now());
+      setElapsed('0m 0s');
+    } catch (e: any) {
       console.error(e);
-      alert('Failed to start. Ensure you are on a Weibo page and refresh it.');
+      alert(`Failed to start: ${e.message || e}. \n\nPlease refresh the Weibo page and try again.`);
     }
   };
 
@@ -89,26 +109,38 @@ const WeiboView = () => {
   const clearData = () => {
     if (confirm('Clear all scraped data?')) {
       setPosts([]);
+      setElapsed('0m 0s');
+      setStartTime(null);
     }
   };
 
   const filteredPosts = useMemo(() => {
-    let res = posts.filter(p => 
-      p.content.toLowerCase().includes(filterKeyword.toLowerCase()) || 
-      p.author.toLowerCase().includes(filterKeyword.toLowerCase())
-    );
+    let res = posts.filter(p => p.content && p.content.trim() !== '') // Filter out null/empty content
+      .filter(p => {
+        const content = p.content;
+        // Exclude deleted posts
+        if (content.includes('此微博已被作者删除')) return false;
+        if (content.includes('该微博因违反《微博社区公约》的相关规定，已被删除')) return false;
+        
+        return content.toLowerCase().includes(filterKeyword.toLowerCase()) || 
+               p.author.toLowerCase().includes(filterKeyword.toLowerCase());
+      });
     
+    if (showOriginalOnly) {
+      res = res.filter(p => !p.isRetweet);
+    }
+
     // Assuming scraped order is roughly 'newest' first (top of page down)
     if (sortOrder === 'oldest') {
       res = [...res].reverse();
     }
     return res;
-  }, [posts, filterKeyword, sortOrder]);
+  }, [posts, filterKeyword, sortOrder, showOriginalOnly]);
 
   const progress = limit > 0 ? Math.min((posts.length / limit) * 100, 100) : 0;
 
   const exportJSON = () => {
-    const blob = new Blob([JSON.stringify(posts, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(filteredPosts, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -117,7 +149,7 @@ const WeiboView = () => {
   };
 
   const exportMarkdown = () => {
-    const md = posts.map(p => `### ${p.author} (${p.publishTime})\n\n${p.content}\n\n[Link](${p.link || '#'})`).join('\n\n---\n\n');
+    const md = filteredPosts.map(p => `### ${p.author} (${p.publishTime})\n\n${p.content}\n\n[Link](${p.link || '#'})`).join('\n\n---\n\n');
     const blob = new Blob([md], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -158,6 +190,12 @@ const WeiboView = () => {
                />
             </div>
           </div>
+          
+          {/* Status Display */}
+          <div className="flex justify-between items-center text-xs text-muted-foreground">
+             <span>Scraped: <span className="font-medium text-foreground">{filteredPosts.length}</span> / {posts.length}</span>
+             <span>Time: <span className="font-mono">{elapsed}</span></span>
+          </div>
 
           {/* Progress */}
           {limit > 0 && (
@@ -168,8 +206,8 @@ const WeiboView = () => {
        </div>
 
        {/* Toolbar */}
-       <div className="px-4 py-2 border-b bg-card/50 flex gap-2 items-center text-sm shrink-0">
-          <div className="relative flex-1">
+       <div className="px-4 py-2 border-b bg-card/50 flex flex-wrap gap-2 items-center text-sm shrink-0">
+          <div className="relative flex-1 min-w-[120px]">
              <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
              <input 
                placeholder="Filter..." 
@@ -178,6 +216,19 @@ const WeiboView = () => {
                className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
              />
           </div>
+          
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
+            <input 
+              type="checkbox"
+              checked={showOriginalOnly}
+              onChange={(e) => setShowOriginalOnly(e.target.checked)}
+              className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+            />
+            Original
+          </label>
+
+          <div className="h-4 w-px bg-border mx-1"></div>
+
           <button 
              onClick={() => setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')}
              className="p-1.5 hover:bg-muted rounded text-muted-foreground"
@@ -196,14 +247,10 @@ const WeiboView = () => {
 
        {/* List */}
        <div className="flex-1 overflow-auto p-4 space-y-3">
-          <div className="text-xs text-muted-foreground text-center mb-2">
-             {filteredPosts.length} items {isScraping && '(Scraping...)'}
-          </div>
           {filteredPosts.map(post => (
              <div key={post.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2">
                 <div className="flex justify-between items-start">
-                   <span className="font-semibold text-primary">{post.author}</span>
-                   <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{post.publishTime}</span>
+                   <span className="font-semibold text-primary">{post.publishTime}</span>
                 </div>
                 <p className="text-card-foreground leading-relaxed line-clamp-4 hover:line-clamp-none transition-all">
                    {post.content}
@@ -358,12 +405,12 @@ function App() {
 
   return (
     <div className="w-full h-screen bg-background text-foreground flex flex-col font-sans">
-      {/* <header className="px-4 py-3 border-b flex items-center gap-2 bg-card shrink-0">
+      <header className="px-4 py-3 border-b flex items-center gap-2 bg-card shrink-0">
         <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold text-xs">
           S
         </div>
         <h1 className="font-bold tracking-tight text-sm">Scrape to Markdown</h1>
-      </header> */}
+      </header>
       
       <Tabs>
         <TabTrigger id="weibo" active={activeTab} onClick={setActiveTab} icon={MessagesSquare}>
