@@ -1,73 +1,43 @@
-# React + TypeScript + Vite
+# Scrape to Markdown Chrome Extension
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个简洁的 Chrome 浏览器扩展，专注于将网页内容转化为 Markdown 格式，并提供针对微博的批量抓取功能。
 
-Currently, two official plugins are available:
+## ✨ 主要功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1.  **微博抓取 (Weibo Scraper)**:
+    *   自动滚动加载用户主页。
+    *   批量抓取原创微博内容。
+    *   支持按关键词筛选、按时间排序。
+    *   支持仅导出原创微博（过滤转发）。
+    *   自动过滤已删除的微博。
+    *   一键导出为 JSON 或 Markdown。
+2.  **网页转 Markdown (Page to Markdown)**:
+    *   提取当前网页正文，去除广告和无关元素。
+    *   一键复制或下载为 `.md` 文件。
 
-## React Compiler
+## 🛠️ 安装说明
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1.  下载 Release 页面中的 `extension.zip` 并解压，或 `git clone` 本仓库并运行 `npm run build` 生成 `dist` 目录。
+2.  打开 Chrome 浏览器，访问 `chrome://extensions/`。
+3.  开启右上角的 **"开发者模式" (Developer mode)**。
+4.  点击 **"加载已解压的扩展程序" (Load unpacked)**，选择本项目下的 `dist` 文件夹。
 
-## Expanding the ESLint configuration
+## 💻 开发构建
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+```bash
+# 安装依赖
+npm install
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+# 开发模式 (监听文件变化)
+npm run dev
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# 生产构建
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 📝 技术栈
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+*   React 19 + TypeScript
+*   Vite + @crxjs/vite-plugin
+*   TailwindCSS + ShadcnUI
+*   @mozilla/readability + Turndown
