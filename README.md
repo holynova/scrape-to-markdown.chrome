@@ -1,43 +1,57 @@
 # Scrape to Markdown Chrome Extension
 
-一个简洁的 Chrome 浏览器扩展，专注于将网页内容转化为 Markdown 格式，并提供针对微博的批量抓取功能。
+A versatile Chrome extension for content scraping, format conversion, and batch image downloading.
 
-## ✨ 主要功能
+一个多功能 Chrome 扩展，用于内容抓取、格式转换和批量图片下载。
 
-1.  **微博抓取 (Weibo Scraper)**:
-    *   自动滚动加载用户主页。
-    *   批量抓取原创微博内容。
-    *   支持按关键词筛选、按时间排序。
-    *   支持仅导出原创微博（过滤转发）。
-    *   自动过滤已删除的微博。
-    *   一键导出为 JSON 或 Markdown。
-2.  **网页转 Markdown (Page to Markdown)**:
-    *   提取当前网页正文，去除广告和无关元素。
-    *   一键复制或下载为 `.md` 文件。
+---
 
-## 🛠️ 安装说明
+## ✨ Features / 功能
 
-1.  下载 Release 页面中的 `extension.zip` 并解压，或 `git clone` 本仓库并运行 `npm run build` 生成 `dist` 目录。
-2.  打开 Chrome 浏览器，访问 `chrome://extensions/`。
-3.  开启右上角的 **"开发者模式" (Developer mode)**。
-4.  点击 **"加载已解压的扩展程序" (Load unpacked)**，选择本项目下的 `dist` 文件夹。
+| Feature | Description |
+|---------|-------------|
+| **Weibo Scraper** | Batch scrape original posts from Weibo user profiles with keyword filtering and export to JSON/Markdown. |
+| **微博抓取** | 批量抓取微博用户主页的原创微博，支持关键词筛选，导出为 JSON/Markdown。 |
+| **Page to Markdown** | Convert any webpage content to clean Markdown format with one click. |
+| **网页转 Markdown** | 一键将任意网页内容转换为干净的 Markdown 格式。 |
+| **Gemini Saver** | Download all AI-generated images from Gemini MyStuff page as a ZIP file. |
+| **Gemini 图片下载** | 将 Gemini MyStuff 页面的所有 AI 生成图片打包下载为 ZIP 文件。 |
+| **Page Images** | Scan and download all images from any webpage with size filtering. |
+| **页面图片下载** | 扫描任意网页的所有图片，支持按尺寸筛选后批量下载。 |
 
-## 💻 开发构建
+---
 
+## 🛠️ Installation / 安装
+
+### From Release / 从发布版安装
+1. Download `scrape-to-markdown-vX.X.X.zip` from [Releases](https://github.com/holynova/scrape-to-markdown.chrome/releases)
+2. Unzip and load the folder in `chrome://extensions/` with Developer Mode enabled
+
+### From Source / 从源码构建
 ```bash
-# 安装依赖
+git clone https://github.com/holynova/scrape-to-markdown.chrome.git
+cd scrape-to-markdown.chrome
 npm install
-
-# 开发模式 (监听文件变化)
-npm run dev
-
-# 生产构建
 npm run build
+# Load the `dist` folder in chrome://extensions/
 ```
 
-## 📝 技术栈
+---
 
-*   React 19 + TypeScript
-*   Vite + @crxjs/vite-plugin
-*   TailwindCSS + ShadcnUI
-*   @mozilla/readability + Turndown
+## 💻 Development / 开发
+
+```bash
+npm install      # Install dependencies / 安装依赖
+npm run dev      # Development mode / 开发模式
+npm run build    # Production build / 生产构建
+```
+
+---
+
+## 📝 Tech Stack / 技术栈
+
+- React 19 + TypeScript
+- Vite + @crxjs/vite-plugin
+- TailwindCSS
+- JSZip (for image packaging / 用于图片打包)
+- @mozilla/readability + Turndown
