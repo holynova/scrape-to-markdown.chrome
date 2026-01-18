@@ -7,6 +7,8 @@ console.log('Scrape-to-Markdown Content Script Loaded');
 let weiboScraper: WeiboScraper | null = null;
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  console.log('[ContentScript] Received message:', request.action, request);
+  
   if (request.action === 'SCRAPE_MARKDOWN') {
     (async () => {
       try {
@@ -112,6 +114,47 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       sendResponse({ success: true, count: downloadList.length });
     } else {
       sendResponse({ success: false, error: 'No images found' });
+    }
+    return true;
+  }
+
+  // Extract all page images with dimension info
+  if (request.action === 'EXTRACT_PAGE_IMAGES') {
+    console.log('Extracting page images...');
+    const images = Array.from(document.querySelectorAll('img'));
+    
+    const imageData = images
+      .filter(img => img.src && img.src.startsWith('http'))
+      .map(img => ({
+        url: img.src,
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+      }))
+      .filter(img => img.width > 0 && img.height > 0);
+
+    // Remove duplicates by URL
+    const uniqueImages = Array.from(
+      new Map(imageData.map(img => [img.url, img])).values()
+    );
+
+    console.log(`Found ${uniqueImages.length} unique images.`);
+    sendResponse({ success: true, images: uniqueImages });
+    return true;
+  }
+
+  // Download selected page images
+  if (request.action === 'DOWNLOAD_PAGE_IMAGES') {
+    const urls = request.urls as string[];
+    console.log(`Downloading ${urls.length} page images...`);
+    
+    if (urls.length > 0) {
+      chrome.runtime.sendMessage({ 
+        action: 'DOWNLOAD_IMAGES', 
+        urls: urls 
+      });
+      sendResponse({ success: true, count: urls.length });
+    } else {
+      sendResponse({ success: false, error: 'No images to download' });
     }
     return true;
   }

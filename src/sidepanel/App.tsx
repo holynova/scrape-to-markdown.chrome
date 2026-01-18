@@ -140,6 +140,195 @@ const GeminiView = () => {
   )
 }
 
+interface PageImage {
+  url: string;
+  width: number;
+  height: number;
+}
+
+const PageImagesView = () => {
+  const [status, setStatus] = useState<{ type: 'idle' | 'scanning' | 'loading' | 'success' | 'error', message?: string, progress?: number }>({ type: 'idle' });
+  const [images, setImages] = useState<PageImage[]>([]);
+  const [minWidth, setMinWidth] = useState(100);
+  const [minHeight, setMinHeight] = useState(100);
+
+  // Listen for progress updates from background script
+  useEffect(() => {
+    const listener = (message: any) => {
+      console.log('[PageImages] Received message:', message);
+      if (message.action === 'DOWNLOAD_PROGRESS') {
+        setStatus({ 
+          type: 'loading', 
+          message: message.message,
+          progress: message.progress 
+        });
+      } else if (message.action === 'DOWNLOAD_COMPLETE') {
+        setStatus({ type: 'success', message: message.message });
+      } else if (message.action === 'DOWNLOAD_ERROR') {
+        setStatus({ type: 'error', message: message.message });
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
+
+  // Filter images by dimensions
+  const filteredImages = useMemo(() => {
+    return images.filter(img => img.width >= minWidth && img.height >= minHeight);
+  }, [images, minWidth, minHeight]);
+
+  const handleScan = async () => {
+    setStatus({ type: 'scanning', message: 'Scanning page for images...' });
+    setImages([]);
+    
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      console.log('[PageImages] Active tab:', tab);
+      
+      if (!tab.id) throw new Error("No active tab found");
+      if (!tab.url) throw new Error("Tab URL is undefined");
+      
+      // Check if it's a restricted page
+      if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
+        throw new Error("Cannot scan browser internal pages");
+      }
+
+      console.log('[PageImages] Sending EXTRACT_PAGE_IMAGES to:', tab.url);
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'EXTRACT_PAGE_IMAGES' });
+      console.log('[PageImages] Response:', response);
+      
+      if (response && response.success) {
+        setImages(response.images);
+        setStatus({ type: 'idle', message: `Found ${response.images.length} images` });
+      } else {
+        setStatus({ type: 'error', message: response?.error || 'No response from page' });
+      }
+    } catch (err: any) {
+      console.error('[PageImages] Error:', err);
+      // Provide more helpful error message
+      let errorMsg = err.message || 'Failed to scan page';
+      if (err.message?.includes('Could not establish connection') || err.message?.includes('Receiving end does not exist')) {
+        errorMsg = 'Content script not loaded. Try refreshing the page.';
+      }
+      setStatus({ type: 'error', message: errorMsg });
+    }
+  };
+
+  const handleDownload = async () => {
+    if (filteredImages.length === 0) return;
+    
+    setStatus({ type: 'loading', message: `Preparing to download ${filteredImages.length} images...` });
+    
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab.id) throw new Error("No active tab");
+
+      const urls = filteredImages.map(img => img.url);
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'DOWNLOAD_PAGE_IMAGES', urls });
+      
+      if (response && response.success) {
+        setStatus({ type: 'loading', message: `Downloading ${response.count} images...` });
+      } else {
+        setStatus({ type: 'error', message: response?.error || 'Failed to start download' });
+      }
+    } catch (err: any) {
+      setStatus({ type: 'error', message: err.message || 'Failed to download' });
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <h2 className="text-lg font-semibold flex items-center gap-2">
+        <Image className="w-5 h-5 text-primary" />
+        Page Images
+      </h2>
+      
+      <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-4">
+        {/* Scan button */}
+        <button 
+          onClick={handleScan}
+          disabled={status.type === 'scanning' || status.type === 'loading'}
+          className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+        >
+          {status.type === 'scanning' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          {status.type === 'scanning' ? 'Scanning...' : 'Scan Page for Images'}
+        </button>
+
+        {/* Dimension filters */}
+        {images.length > 0 && (
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              Filter by minimum dimensions:
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground">Min Width</label>
+                <input
+                  type="number"
+                  value={minWidth}
+                  onChange={(e) => setMinWidth(Number(e.target.value))}
+                  className="w-full px-3 py-1.5 border rounded text-sm bg-background"
+                  min={0}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground">Min Height</label>
+                <input
+                  type="number"
+                  value={minHeight}
+                  onChange={(e) => setMinHeight(Number(e.target.value))}
+                  className="w-full px-3 py-1.5 border rounded text-sm bg-background"
+                  min={0}
+                />
+              </div>
+            </div>
+            
+            <div className="text-sm">
+              <span className="font-medium">{filteredImages.length}</span>
+              <span className="text-muted-foreground"> of {images.length} images match filter</span>
+            </div>
+
+            {/* Download button */}
+            <button 
+              onClick={handleDownload}
+              disabled={status.type === 'loading' || filteredImages.length === 0}
+              className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            >
+              {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {status.type === 'loading' ? 'Downloading...' : `Download ${filteredImages.length} Images`}
+            </button>
+          </div>
+        )}
+
+        {/* Progress bar */}
+        {status.type === 'loading' && status.progress !== undefined && (
+          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-primary transition-all duration-300" 
+              style={{ width: `${status.progress}%` }} 
+            />
+          </div>
+        )}
+
+        {/* Status message */}
+        {status.message && (
+          <div className={cn(
+            "p-3 rounded-md text-sm flex items-center gap-2",
+            status.type === 'scanning' && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+            status.type === 'loading' && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+            status.type === 'success' && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+            status.type === 'error' && "bg-destructive/10 text-destructive",
+          )}>
+            {(status.type === 'scanning' || status.type === 'loading') && <Loader2 className="w-4 h-4 animate-spin" />}
+            {status.type === 'error' && <AlertCircle className="w-4 h-4" />}
+            {status.message}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const WeiboView = () => {
   const [isScraping, setIsScraping] = useState(false);
   const [limit, setLimit] = useState(0);
@@ -526,6 +715,9 @@ function App() {
         <TabTrigger id="gemini" active={activeTab} onClick={setActiveTab} icon={Image}>
           Gemini
         </TabTrigger>
+        <TabTrigger id="images" active={activeTab} onClick={setActiveTab} icon={Download}>
+          Images
+        </TabTrigger>
       </Tabs>
 
       <main className="flex-1 overflow-hidden flex flex-col bg-muted/10">
@@ -533,6 +725,7 @@ function App() {
         {activeTab === 'markdown' && <MarkdownView />}
         {activeTab === 'youtube' && <YoutubeView />}
         {activeTab === 'gemini' && <GeminiView />}
+        {activeTab === 'images' && <PageImagesView />}
       </main>
       
       {/* Build version footer */}
