@@ -10,6 +10,9 @@ export default defineConfig({
     react(),
     crx({ manifest }),
   ],
+  define: {
+    __BUILD_TIMESTAMP__: JSON.stringify(new Date().toISOString()),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

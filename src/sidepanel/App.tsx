@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2 } from 'lucide-react'
+import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2, Image } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { WeiboPost } from '@/types'
 
@@ -38,6 +38,107 @@ const TabTrigger = ({
 }
 
 // --- Feature Views ---
+
+const GeminiView = () => {
+  const [status, setStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error', message?: string, progress?: number }>({ type: 'idle' });
+
+  // Listen for progress updates from background script
+  useEffect(() => {
+    const listener = (message: any) => {
+      console.log('[Sidepanel] Received message:', message);
+      if (message.action === 'DOWNLOAD_PROGRESS') {
+        setStatus({ 
+          type: 'loading', 
+          message: message.message,
+          progress: message.progress 
+        });
+      } else if (message.action === 'DOWNLOAD_COMPLETE') {
+        setStatus({ type: 'success', message: message.message });
+      } else if (message.action === 'DOWNLOAD_ERROR') {
+        setStatus({ type: 'error', message: message.message });
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
+
+  const handleDownload = async () => {
+    setStatus({ type: 'loading', message: 'Extracting images...' });
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      console.log('[Gemini] Active tab:', tab);
+      
+      if (!tab.id) throw new Error("No active tab found");
+      if (!tab.url) throw new Error("Tab URL is undefined");
+      
+      // Check if we're on the right page
+      if (!tab.url.includes('gemini.google.com')) {
+        throw new Error(`Please navigate to gemini.google.com first. Current URL: ${tab.url}`);
+      }
+
+      console.log('[Gemini] Sending EXTRACT_GEMINI_IMAGES to tab:', tab.id);
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'EXTRACT_GEMINI_IMAGES' });
+      console.log('[Gemini] Response:', response);
+      
+      if (response && response.success) {
+        setStatus({ type: 'loading', message: `Found ${response.count} images. Starting download...` });
+      } else {
+        const errorDetail = response ? JSON.stringify(response) : 'No response from content script';
+        setStatus({ type: 'error', message: `Error: ${response?.error || errorDetail}` });
+      }
+    } catch (err: any) {
+      console.error('[Gemini] Error:', err);
+      setStatus({ type: 'error', message: `Error: ${err.message || String(err)}` });
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <h2 className="text-lg font-semibold flex items-center gap-2">
+        <Image className="w-5 h-5 text-primary" />
+        Gemini Saver
+      </h2>
+      
+      <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Navigate to your <a href="https://gemini.google.com/mystuff" target="_blank" rel="noreferrer" className="underline text-primary">Gemini/MyStuff</a> page and click below to download all full-resolution images.
+        </p>
+        
+        <button 
+          onClick={handleDownload}
+          disabled={status.type === 'loading'}
+          className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+        >
+          {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {status.type === 'loading' ? 'Processing...' : 'Download All Images'}
+        </button>
+
+        {/* Progress bar */}
+        {status.type === 'loading' && status.progress !== undefined && (
+          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-primary transition-all duration-300" 
+              style={{ width: `${status.progress}%` }} 
+            />
+          </div>
+        )}
+
+        {status.type !== 'idle' && (
+          <div className={cn(
+            "p-3 rounded-md text-sm flex items-center gap-2",
+            status.type === 'loading' && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+            status.type === 'success' && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+            status.type === 'error' && "bg-destructive/10 text-destructive",
+          )}>
+             {status.type === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+             {status.type === 'error' && <AlertCircle className="w-4 h-4" />}
+             {status.message}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const WeiboView = () => {
   const [isScraping, setIsScraping] = useState(false);
@@ -405,12 +506,12 @@ function App() {
 
   return (
     <div className="w-full h-screen bg-background text-foreground flex flex-col font-sans">
-      <header className="px-4 py-3 border-b flex items-center gap-2 bg-card shrink-0">
+      {/* <header className="px-4 py-3 border-b flex items-center gap-2 bg-card shrink-0">
         <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold text-xs">
           S
         </div>
         <h1 className="font-bold tracking-tight text-sm">Scrape to Markdown</h1>
-      </header>
+      </header> */}
       
       <Tabs>
         <TabTrigger id="weibo" active={activeTab} onClick={setActiveTab} icon={MessagesSquare}>
@@ -422,15 +523,27 @@ function App() {
         <TabTrigger id="youtube" active={activeTab} onClick={setActiveTab} icon={Youtube}>
           YT
         </TabTrigger>
+        <TabTrigger id="gemini" active={activeTab} onClick={setActiveTab} icon={Image}>
+          Gemini
+        </TabTrigger>
       </Tabs>
 
       <main className="flex-1 overflow-hidden flex flex-col bg-muted/10">
         {activeTab === 'weibo' && <WeiboView />}
         {activeTab === 'markdown' && <MarkdownView />}
         {activeTab === 'youtube' && <YoutubeView />}
+        {activeTab === 'gemini' && <GeminiView />}
       </main>
+      
+      {/* Build version footer */}
+      <footer className="px-4 py-1 border-t bg-muted/20 text-xs text-muted-foreground text-center shrink-0">
+        Build: {new Date(__BUILD_TIMESTAMP__).toLocaleString()}
+      </footer>
     </div>
   )
 }
+
+// Declare global constant injected by Vite
+declare const __BUILD_TIMESTAMP__: string;
 
 export default App
