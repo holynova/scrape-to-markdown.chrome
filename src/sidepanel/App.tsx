@@ -5,7 +5,7 @@ import type { WeiboPost } from '@/types'
 
 // --- Tabs Components ---
 const Tabs = ({ children }: { children: React.ReactNode }) => {
-  return <div className="flex border-b bg-muted/20 shrink-0">{children}</div>
+  return <div className="grid grid-cols-3 gap-2 p-3 border-b bg-muted/20 shrink-0">{children}</div>
 }
 
 const TabTrigger = ({ 
@@ -21,18 +21,26 @@ const TabTrigger = ({
   children: React.ReactNode, 
   icon?: any 
 }) => {
+  const isActive = active === id;
   return (
     <button
       onClick={() => onClick(id)}
       className={cn(
-        "flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors hover:text-primary hover:bg-muted/40",
-        active === id
-          ? "border-b-2 border-primary text-primary bg-background"
-          : "text-muted-foreground border-b-2 border-transparent"
+        "flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-all",
+        "border hover:bg-muted/60",
+        isActive
+          ? "border-primary bg-primary/10 text-primary shadow-sm"
+          : "border-border text-muted-foreground bg-background"
       )}
     >
-      {Icon && <Icon className="w-4 h-4" />}
-      {children}
+      <div className={cn(
+        "w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0",
+        isActive ? "border-primary" : "border-muted-foreground/50"
+      )}>
+        {isActive && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+      </div>
+      {Icon && <Icon className="w-3 h-3 shrink-0" />}
+      <span className="truncate">{children}</span>
     </button>
   )
 }
