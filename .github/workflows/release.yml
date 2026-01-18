@@ -29,10 +29,11 @@ jobs:
         run: npm run build
 
       - name: Zip extension
-        run: cd dist && zip -r ../extension.zip .
+        run: cd dist && zip -r ../scrape-to-markdown-${{ github.ref_name }}.zip .
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: extension.zip
+          files: scrape-to-markdown-${{ github.ref_name }}.zip
           generate_release_notes: true
+          name: Release ${{ github.ref_name }}
