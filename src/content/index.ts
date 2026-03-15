@@ -1,10 +1,21 @@
 import { Readability } from '@mozilla/readability';
 import TurndownService from 'turndown';
 import { WeiboScraper } from './weibo';
+import { DoubanScraper } from './douban';
 
 console.log('Scrape-to-Markdown Content Script Loaded');
 
 let weiboScraper: WeiboScraper | null = null;
+let doubanScraper: DoubanScraper | null = null;
+
+// Handle auto-resume for Douban scraping (since pagination reloads page)
+DoubanScraper.checkAndResume((data) => {
+   chrome.runtime.sendMessage({ action: 'DOUBAN_DATA', data }).catch(() => {});
+}, () => {
+   chrome.runtime.sendMessage({ action: 'DOUBAN_COMPLETE' }).catch(() => {});
+}).then(scraper => {
+   if (scraper) doubanScraper = scraper;
+});
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   console.log('[ContentScript] Received message:', request.action, request);
@@ -75,6 +86,33 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
        weiboScraper.stop();
     }
     sendResponse({ success: true, message: 'Weibo scraper stopped' });
+    return true;
+  }
+
+  if (request.action === 'DOUBAN_START') {
+    if (!doubanScraper) {
+       doubanScraper = new DoubanScraper(
+          (data) => {
+             chrome.runtime.sendMessage({ action: 'DOUBAN_DATA', data }).catch(() => {});
+          },
+          () => {
+             chrome.runtime.sendMessage({ action: 'DOUBAN_COMPLETE' }).catch(() => {});
+          }
+       );
+    }
+    doubanScraper.start(request.limit || 0);
+    sendResponse({ success: true, message: 'Douban scraper started' });
+    return true;
+  }
+
+  if (request.action === 'DOUBAN_STOP') {
+    if (doubanScraper) {
+       doubanScraper.stop();
+    } else {
+       // Just in case we reload and hit stop before script fully initializes
+       chrome.storage.local.set({ isScrapingDouban: false });
+    }
+    sendResponse({ success: true, message: 'Douban scraper stopped' });
     return true;
   }
 

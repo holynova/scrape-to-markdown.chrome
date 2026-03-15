@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2, Image } from 'lucide-react'
+import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2, Image, Book } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { WeiboPost } from '@/types'
+import type { WeiboPost, DoubanBook } from '@/types'
 
 // --- Tabs Components ---
 const Tabs = ({ children }: { children: React.ReactNode }) => {
@@ -577,6 +577,217 @@ const WeiboView = () => {
   )
 }
 
+const DoubanView = () => {
+  const [isScraping, setIsScraping] = useState(false);
+  const [limit, setLimit] = useState(0);
+  const [books, setBooks] = useState<DoubanBook[]>([]);
+  const [filterKeyword, setFilterKeyword] = useState('');
+  
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState('0m 0s');
+
+  useEffect(() => {
+    let interval: any;
+    if (isScraping && startTime) {
+      interval = setInterval(() => {
+        const now = Date.now();
+        const diff = Math.floor((now - startTime) / 1000);
+        const m = Math.floor(diff / 60);
+        const s = diff % 60;
+        setElapsed(`${m}m ${s}s`);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isScraping, startTime]);
+
+  // Read stored state on mount
+  useEffect(() => {
+    chrome.storage.local.get(['isScrapingDouban', 'doubanStartTime']).then(data => {
+      if (data.isScrapingDouban) {
+         setIsScraping(true);
+         setStartTime((data.doubanStartTime as number) || Date.now());
+      }
+    });
+
+    const listener = (message: any) => {
+      if (message.action === 'DOUBAN_DATA') {
+        setBooks(prev => {
+           const newItems = message.data.filter((p: DoubanBook) => !prev.some(existing => existing.id === p.id));
+           if (newItems.length === 0) return prev;
+           return [...prev, ...newItems];
+        });
+      }
+      if (message.action === 'DOUBAN_COMPLETE') {
+        setIsScraping(false);
+        chrome.storage.local.remove(['doubanStartTime']);
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
+
+  const handleStart = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab.id) return;
+      if (!tab.url?.includes('douban.com')) {
+         alert('Please navigate to a Douban page first.\\nExample: https://book.douban.com/people/mobile_sang/collect');
+         return;
+      }
+      setIsScraping(true);
+      const now = Date.now();
+      setStartTime(now);
+      setElapsed('0m 0s');
+      chrome.storage.local.set({ doubanStartTime: now });
+      await chrome.tabs.sendMessage(tab.id, { action: 'DOUBAN_START', limit });
+    } catch (e: any) {
+      console.error(e);
+      alert(`Failed to start: ${e.message || e}. \n\nPlease refresh the Douban page and try again.`);
+      setIsScraping(false);
+      chrome.storage.local.set({ isScrapingDouban: false });
+    }
+  };
+
+  const handleStop = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+         await chrome.tabs.sendMessage(tab.id, { action: 'DOUBAN_STOP' });
+      }
+    } catch (e) {
+       // Ignore, content script might be missing, we just reset state locally
+    } finally {
+      setIsScraping(false);
+      chrome.storage.local.set({ isScrapingDouban: false });
+      chrome.storage.local.remove(['doubanStartTime']);
+    }
+  };
+
+  const clearData = () => {
+    if (confirm('Clear all scraped data?')) {
+      setBooks([]);
+      setElapsed('0m 0s');
+      setStartTime(null);
+    }
+  };
+
+  const filteredBooks = useMemo(() => {
+    return books.filter(b => 
+       b.title.toLowerCase().includes(filterKeyword.toLowerCase()) || 
+       b.comment.toLowerCase().includes(filterKeyword.toLowerCase())
+    );
+  }, [books, filterKeyword]);
+
+  const exportJSON = () => {
+    const blob = new Blob([JSON.stringify(filteredBooks, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `douban_export_${new Date().toISOString()}.json`;
+    a.click();
+  };
+
+  const exportMarkdown = () => {
+    const md = filteredBooks.map(b => `### [${b.title}](${b.link || '#'})\n\n**Rating**: ${b.rating} | **Date**: ${b.readDate}\n\n${b.comment}`).join('\n\n---\n\n');
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `douban_export_${new Date().toISOString()}.md`;
+    a.click();
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-muted/10">
+       <div className="p-4 bg-card border-b space-y-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex gap-2">
+               {!isScraping ? (
+                 <button 
+                   onClick={handleStart}
+                   className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
+                 >
+                   <Play className="w-4 h-4" /> Start
+                 </button>
+               ) : (
+                 <button 
+                   onClick={handleStop}
+                   className="flex-1 flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 rounded-md hover:bg-destructive/90 transition-colors"
+                 >
+                   <Square className="w-4 h-4 fill-current" /> Stop
+                 </button>
+               )}
+            </div>
+            <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2 border">
+               <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
+               <input 
+                 type="number" 
+                 value={limit} 
+                 onChange={(e) => setLimit(Number(e.target.value))}
+                 className="w-16 bg-transparent text-sm text-right focus:outline-none"
+               />
+            </div>
+          </div>
+          <div className="flex justify-between items-center text-xs text-muted-foreground">
+             <span>Scraped: <span className="font-medium text-foreground">{filteredBooks.length}</span> / {books.length}</span>
+             <span>Time: <span className="font-mono">{elapsed}</span></span>
+          </div>
+       </div>
+
+       <div className="px-4 py-2 border-b bg-card/50 flex flex-wrap gap-2 items-center text-sm shrink-0">
+          <div className="relative flex-1 min-w-[120px]">
+             <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+             <input 
+               placeholder="Filter..." 
+               value={filterKeyword}
+               onChange={(e) => setFilterKeyword(e.target.value)}
+               className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+             />
+          </div>
+          <button 
+             onClick={clearData}
+             className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded text-muted-foreground"
+             title="Clear Data"
+          >
+             <Trash2 className="w-4 h-4" />
+          </button>
+       </div>
+
+       <div className="flex-1 overflow-auto p-4 space-y-3">
+          {filteredBooks.map(book => (
+             <div key={book.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2">
+                <div className="flex justify-between items-start">
+                   <a href={book.link} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">{book.title}</a>
+                   <span className="text-xs text-muted-foreground">{book.readDate}</span>
+                </div>
+                {book.rating && <div className="text-xs font-medium text-amber-500">{book.rating}</div>}
+                {book.comment && <p className="text-card-foreground leading-relaxed italic border-l-2 pl-2 border-muted-foreground/30">
+                   "{book.comment}"
+                </p>}
+             </div>
+          ))}
+          {books.length === 0 && (
+             <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
+                No data. Open a Douban collect page and click Start. <br/>
+                <span className="text-xs select-all text-primary/70 mt-2 block">https://book.douban.com/people/mobile_sang/collect</span>
+             </div>
+          )}
+       </div>
+
+       {books.length > 0 && (
+         <div className="p-3 border-t bg-card shrink-0 grid grid-cols-2 gap-2">
+            <button onClick={exportJSON} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
+               <Download className="w-3.5 h-3.5" /> JSON
+            </button>
+            <button onClick={exportMarkdown} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
+               <FileText className="w-3.5 h-3.5" /> Markdown
+            </button>
+         </div>
+       )}
+    </div>
+  )
+}
+
 const MarkdownView = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{title: string, markdown: string, excerpt?: string} | null>(null);
@@ -714,11 +925,11 @@ function App() {
         <TabTrigger id="weibo" active={activeTab} onClick={setActiveTab} icon={MessagesSquare}>
           Weibo
         </TabTrigger>
+        <TabTrigger id="douban" active={activeTab} onClick={setActiveTab} icon={Book}>
+          Douban
+        </TabTrigger>
         <TabTrigger id="markdown" active={activeTab} onClick={setActiveTab} icon={FileText}>
           Markdown
-        </TabTrigger>
-        <TabTrigger id="youtube" active={activeTab} onClick={setActiveTab} icon={Youtube}>
-          YT
         </TabTrigger>
         <TabTrigger id="gemini" active={activeTab} onClick={setActiveTab} icon={Image}>
           Gemini
@@ -730,6 +941,7 @@ function App() {
 
       <main className="flex-1 overflow-hidden flex flex-col bg-muted/10">
         {activeTab === 'weibo' && <WeiboView />}
+        {activeTab === 'douban' && <DoubanView />}
         {activeTab === 'markdown' && <MarkdownView />}
         {activeTab === 'youtube' && <YoutubeView />}
         {activeTab === 'gemini' && <GeminiView />}
