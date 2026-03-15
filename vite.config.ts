@@ -18,6 +18,13 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      input: {
+        intro: path.resolve(__dirname, 'intro.html'),
+      },
+    },
+  },
   server: {
     port: 6666,
     strictPort: true,
