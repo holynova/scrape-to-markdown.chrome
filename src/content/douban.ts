@@ -1,28 +1,32 @@
-import type { DoubanBook } from '../types';
+import type { DoubanItem } from '../types';
 
 export class DoubanScraper {
   private isRunning = false;
   private intervalId: any = null;
 
-  private onData: (data: DoubanBook[]) => void;
+  private onData: (data: DoubanItem[]) => void;
+  private onLog: (msg: string) => void;
   private onFinish: () => void;
 
   constructor(
-    onData: (data: DoubanBook[]) => void,
+    onData: (data: DoubanItem[]) => void,
+    onLog: (msg: string) => void,
     onFinish: () => void
   ) {
     this.onData = onData;
+    this.onLog = onLog;
     this.onFinish = onFinish;
   }
 
   static async checkAndResume(
-      onData: (data: DoubanBook[]) => void,
+      onData: (data: DoubanItem[]) => void,
+      onLog: (msg: string) => void,
       onFinish: () => void
   ) {
       const data = await chrome.storage.local.get(['isScrapingDouban', 'doubanLimit']);
       if (data.isScrapingDouban) {
          console.log('[DoubanScraper] Resuming scrape on page load...');
-         const scraper = new DoubanScraper(onData, onFinish);
+         const scraper = new DoubanScraper(onData, onLog, onFinish);
          scraper.start((data.doubanLimit as number) || 0, true);
          return scraper;
       }
@@ -39,6 +43,7 @@ export class DoubanScraper {
     }
 
     console.log('[DoubanScraper] Started');
+    this.onLog(`[System] Started scraping on: ${window.location.href}`);
 
     // Initial delay to simulate human behavior
     setTimeout(() => {
@@ -51,27 +56,27 @@ export class DoubanScraper {
     if (this.intervalId) clearTimeout(this.intervalId);
     await chrome.storage.local.set({ isScrapingDouban: false });
     console.log('[DoubanScraper] Stopped.');
+    this.onLog(`[System] Scraper stopped.`);
     this.onFinish();
   }
 
   private processPage() {
     if (!this.isRunning) return;
 
-    // 1. Extract data
     this.scrapeCurrentView();
 
-    if (!this.isRunning) return; // Might be stopped based on data sent, e.g limit reached via feedback (if we implemented it)
+    if (!this.isRunning) return;
 
-    // 2. Scroll to bottom
     window.scrollTo({
       top: document.body.scrollHeight,
       behavior: 'smooth'
     });
+    this.onLog(`[Action] Scrolled to bottom of page`);
 
-    // 3. Find next and click
     const nextBtn = document.querySelector('.paginator .next a') as HTMLAnchorElement;
     if (nextBtn) {
       console.log('[DoubanScraper] Found next page link. Going to click in a random delay.');
+      this.onLog(`[Action] Found next page. Navigating...`);
       const delay = Math.random() * 2000 + 1500;
       this.intervalId = setTimeout(() => {
         if (!this.isRunning) return;
@@ -79,6 +84,7 @@ export class DoubanScraper {
       }, delay);
     } else {
       console.log('[DoubanScraper] Reached bottom or no next page. Stopping.');
+      this.onLog(`[System] Reached end of list.`);
       this.stop();
     }
   }
@@ -86,15 +92,36 @@ export class DoubanScraper {
   private scrapeCurrentView() {
     if (!this.isRunning) return;
 
-    const newBooks: DoubanBook[] = [];
-    const items = document.querySelectorAll('li.subject-item');
+    const newItems: DoubanItem[] = [];
+    const url = window.location.href;
+    
+    let type: 'book' | 'movie' = 'book';
+    if (url.includes('movie.douban.com')) {
+      type = 'movie';
+    } else if (url.includes('music.douban.com')) {
+      type = 'movie'; // Or create a 'music' type later. For now assume it falls into general items if added
+    }
+
+    let status: 'wish' | 'collect' = 'collect';
+    if (url.includes('/wish')) {
+      status = 'wish';
+    } else if (url.includes('/do')) {
+      status = 'collect'; // Treating 'doing' as collect or similar, but spec says just wish/collect
+    }
+
+    const items = document.querySelectorAll('li.subject-item, div.item');
     console.log(`[DoubanScraper] Found ${items.length} items on page.`);
 
     items.forEach((node) => {
       const card = node as HTMLElement;
-      const titleEl = card.querySelector('.info h2 a') as HTMLAnchorElement;
-      let title = titleEl ? titleEl.innerText.replace(/\n| /g, '').trim() : '';
-      let link = titleEl ? titleEl.href : '';
+      
+      // Title extraction (movies often use .title a em)
+      let titleEl = card.querySelector('.info h2 a, .info .title a em, .title a') as HTMLElement;
+      let title = titleEl ? (titleEl.innerText || titleEl.textContent || '').replace(/\n| /g, '').trim() : '';
+      
+      // Link extraction
+      let linkEl = card.querySelector('.info h2 a, .info .title a, .title a') as HTMLAnchorElement;
+      let link = linkEl ? linkEl.href : '';
 
       let id = '';
       if (link) {
@@ -106,7 +133,7 @@ export class DoubanScraper {
       if (!id) id = this.hash(title + (new Date().getTime()));
 
       let rating = '';
-      const ratingEl = card.querySelector('.info .short-note [class^="rating"]');
+      const ratingEl = card.querySelector('.info .short-note [class^="rating"], .date [class^="rating"], span[class^="rating"]');
       if (ratingEl) {
          const classList = Array.from(ratingEl.classList);
          const ratingClass = classList.find(c => c.startsWith('rating') && c.endsWith('-t'));
@@ -117,24 +144,27 @@ export class DoubanScraper {
       }
 
       let readDate = '';
-      const dateEl = card.querySelector('.info .short-note .date');
+      const dateEl = card.querySelector('.info .short-note .date, .date');
       if (dateEl) {
           readDate = dateEl.textContent || '';
-          readDate = readDate.replace('读过', '').trim();
+          readDate = readDate.replace(/读过|看过|想看|想读/g, '').trim();
       }
 
       let comment = '';
-      const commentEl = card.querySelector('.info .short-note p.comment');
+      const commentEl = card.querySelector('.info .short-note p.comment, .comment, span.comment');
       if (commentEl) {
           comment = commentEl.textContent?.trim() || '';
       }
 
-      const book: DoubanBook = { id, title, rating, readDate, comment, link };
-      newBooks.push(book);
+      const item: DoubanItem = { id, title, rating, readDate, comment, link, type, status };
+      newItems.push(item);
+      this.onLog(`[Extract] ${title} (${item.type})`);
     });
 
-    if (newBooks.length > 0) {
-      this.onData(newBooks);
+    if (newItems.length > 0) {
+      this.onData(newItems);
+    } else {
+      this.onLog(`[Warning] Found 0 items on this page...`);
     }
   }
 

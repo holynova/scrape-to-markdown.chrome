@@ -7,11 +7,13 @@ export interface WeiboPost {
   isRetweet?: boolean;
 }
 
-export interface DoubanBook {
+export interface DoubanItem {
   id: string;
   title: string;
   rating: string;
   readDate: string;
   comment: string;
   link?: string;
+  type: 'book' | 'movie';
+  status: 'wish' | 'collect';
 }

@@ -1,7 +1,16 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2, Image, Book } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { WeiboPost, DoubanBook } from '@/types'
+import type { WeiboPost, DoubanItem } from '@/types'
+
+export interface DoubanTask {
+  id: string;
+  name: string;
+  url: string;
+  status: 'idle' | 'running' | 'done';
+  type: 'book' | 'movie';
+  subStatus: 'wish' | 'collect';
+}
 
 // --- Tabs Components ---
 const Tabs = ({ children }: { children: React.ReactNode }) => {
@@ -578,13 +587,34 @@ const WeiboView = () => {
 }
 
 const DoubanView = () => {
+  const [username, setUsername] = useState('renjiananhuo');
   const [isScraping, setIsScraping] = useState(false);
   const [limit, setLimit] = useState(0);
-  const [books, setBooks] = useState<DoubanBook[]>([]);
+  const [items, setItems] = useState<DoubanItem[]>([]);
   const [filterKeyword, setFilterKeyword] = useState('');
+  const [activeSubTab, setActiveSubTab] = useState<'book-wish' | 'book-collect' | 'movie-wish' | 'movie-collect'>('book-collect');
   
+  // Sequential task state
+  const [tasks, setTasks] = useState<DoubanTask[]>([
+    { id: 'book-wish', name: 'Book Wish', url: 'https://book.douban.com/people/{user}/wish', status: 'idle', type: 'book', subStatus: 'wish' },
+    { id: 'book-collect', name: 'Book Read', url: 'https://book.douban.com/people/{user}/collect', status: 'idle', type: 'book', subStatus: 'collect' },
+    { id: 'movie-wish', name: 'Movie Wish', url: 'https://movie.douban.com/people/{user}/wish', status: 'idle', type: 'movie', subStatus: 'wish' },
+    { id: 'movie-collect', name: 'Movie Watched', url: 'https://movie.douban.com/people/{user}/collect', status: 'idle', type: 'movie', subStatus: 'collect' }
+  ]);
+  const [isSequential, setIsSequential] = useState(false);
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(-1);
+
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState('0m 0s');
+  
+  const [logs, setLogs] = useState<{time: string, msg: string}[]>([]);
+  const logsEndRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+     if (logsEndRef.current) {
+        logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+     }
+  }, [logs]);
 
   useEffect(() => {
     let interval: any;
@@ -602,50 +632,174 @@ const DoubanView = () => {
 
   // Read stored state on mount
   useEffect(() => {
-    chrome.storage.local.get(['isScrapingDouban', 'doubanStartTime']).then(data => {
+    chrome.storage.local.get([
+       'isScrapingDouban', 
+       'doubanStartTime', 
+       'doubanTasks', 
+       'doubanSequential', 
+       'doubanCurrentTaskIndex',
+       'doubanUsername'
+    ]).then(data => {
       if (data.isScrapingDouban) {
          setIsScraping(true);
          setStartTime((data.doubanStartTime as number) || Date.now());
+         if (data.doubanTasks) setTasks(data.doubanTasks as any[]);
+         if (data.doubanSequential) setIsSequential(true);
+         if (data.doubanCurrentTaskIndex !== undefined) setCurrentTaskIndex(data.doubanCurrentTaskIndex as number);
+         if (data.doubanUsername) setUsername(data.doubanUsername as string);
       }
     });
 
     const listener = (message: any) => {
       if (message.action === 'DOUBAN_DATA') {
-        setBooks(prev => {
-           const newItems = message.data.filter((p: DoubanBook) => !prev.some(existing => existing.id === p.id));
+        setItems(prev => {
+           const newItems = message.data.filter((p: DoubanItem) => !prev.some(existing => existing.id === p.id));
            if (newItems.length === 0) return prev;
            return [...prev, ...newItems];
         });
       }
       if (message.action === 'DOUBAN_COMPLETE') {
-        setIsScraping(false);
-        chrome.storage.local.remove(['doubanStartTime']);
+        handleTaskComplete();
+      }
+      if (message.action === 'DOUBAN_LOG') {
+        const time = new Date().toLocaleTimeString([], { hour12: false });
+        setLogs(prev => [...prev.slice(-99), { time, msg: message.msg }]);
       }
     };
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleStart = async () => {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab.id) return;
-      if (!tab.url?.includes('douban.com')) {
-         alert('Please navigate to a Douban page first.\\nExample: https://book.douban.com/people/mobile_sang/collect');
-         return;
-      }
-      setIsScraping(true);
-      const now = Date.now();
-      setStartTime(now);
-      setElapsed('0m 0s');
-      chrome.storage.local.set({ doubanStartTime: now });
-      await chrome.tabs.sendMessage(tab.id, { action: 'DOUBAN_START', limit });
-    } catch (e: any) {
-      console.error(e);
-      alert(`Failed to start: ${e.message || e}. \n\nPlease refresh the Douban page and try again.`);
+  // Using a ref to access latest state inside listeners/handlers without dependency cycles
+  const stateRef = React.useRef({ isSequential, currentTaskIndex, tasks, username, limit });
+  useEffect(() => {
+     stateRef.current = { isSequential, currentTaskIndex, tasks, username, limit };
+  }, [isSequential, currentTaskIndex, tasks, username, limit]);
+
+  const handleTaskComplete = async () => {
+     const { isSequential, currentTaskIndex, tasks, username, limit } = stateRef.current;
+     
+     if (isSequential && currentTaskIndex >= 0 && currentTaskIndex < tasks.length) {
+        // Mark current as done
+        const updatedTasks = [...tasks];
+        updatedTasks[currentTaskIndex].status = 'done';
+        setTasks(updatedTasks);
+        chrome.storage.local.set({ doubanTasks: updatedTasks });
+
+        const nextIndex = currentTaskIndex + 1;
+        if (nextIndex < tasks.length) {
+           // Move to next
+           setCurrentTaskIndex(nextIndex);
+           chrome.storage.local.set({ doubanCurrentTaskIndex: nextIndex });
+           
+           // Start next task
+           updatedTasks[nextIndex].status = 'running';
+           setTasks(updatedTasks);
+           chrome.storage.local.set({ doubanTasks: updatedTasks });
+           
+           setActiveSubTab(updatedTasks[nextIndex].id as any);
+           startSpecificTask(updatedTasks[nextIndex].url.replace('{user}', username), limit);
+        } else {
+           // All done
+           finishScraping();
+        }
+     } else {
+        // Single task mode finish
+        if (currentTaskIndex >= 0) {
+           const updatedTasks = [...tasks];
+           updatedTasks[currentTaskIndex].status = 'done';
+           setTasks(updatedTasks);
+        }
+        finishScraping();
+     }
+  };
+
+  const finishScraping = () => {
       setIsScraping(false);
-      chrome.storage.local.set({ isScrapingDouban: false });
-    }
+      setIsSequential(false);
+      setCurrentTaskIndex(-1);
+      chrome.storage.local.set({ 
+         isScrapingDouban: false,
+         doubanSequential: false,
+         doubanCurrentTaskIndex: -1
+      });
+      chrome.storage.local.remove(['doubanStartTime', 'doubanTasks']);
+  };
+
+  const startSpecificTask = async (targetUrl: string, limitVal: number) => {
+      try {
+         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+         if (!tab.id) return;
+         
+         // Navigate to the target URL
+         await chrome.tabs.update(tab.id, { url: targetUrl });
+         
+         // Wait for page to load then inject start command
+         // Since it's a new navigation, the content script will re-initialize
+         // We set the storage state, so `DoubanScraper.checkAndResume` will automatically pick it up!
+         // We just need to ensure `isScrapingDouban` is true in storage.
+         chrome.storage.local.set({ isScrapingDouban: true, doubanLimit: limitVal });
+
+      } catch (e: any) {
+         console.error('Navigation failed', e);
+         finishScraping();
+      }
+  };
+
+  const handleStartCurrent = async () => {
+    if (!username) return alert('Please enter a username');
+    
+    // Find index of active tab
+    const idx = tasks.findIndex(t => t.id === activeSubTab);
+    const task = tasks[idx];
+    
+    const updatedTasks = tasks.map((t): DoubanTask => ({ ...t, status: 'idle' }));
+    updatedTasks[idx].status = 'running';
+    setTasks(updatedTasks);
+    setCurrentTaskIndex(idx);
+    setIsSequential(false);
+
+    setIsScraping(true);
+    const now = Date.now();
+    setStartTime(now);
+    setElapsed('0m 0s');
+    
+    chrome.storage.local.set({ 
+       doubanStartTime: now,
+       doubanTasks: updatedTasks,
+       doubanSequential: false,
+       doubanCurrentTaskIndex: idx,
+       doubanUsername: username
+    });
+
+    const url = task.url.replace('{user}', username);
+    await startSpecificTask(url, limit);
+  };
+
+  const handleStartAll = async () => {
+    if (!username) return alert('Please enter a username');
+    
+    const updatedTasks = tasks.map((t, i) => ({ ...t, status: i === 0 ? 'running' as const : 'idle' as const }));
+    setTasks(updatedTasks);
+    setCurrentTaskIndex(0);
+    setIsSequential(true);
+    setActiveSubTab(tasks[0].id as any);
+
+    setIsScraping(true);
+    const now = Date.now();
+    setStartTime(now);
+    setElapsed('0m 0s');
+    
+    chrome.storage.local.set({ 
+       doubanStartTime: now,
+       doubanTasks: updatedTasks,
+       doubanSequential: true,
+       doubanCurrentTaskIndex: 0,
+       doubanUsername: username
+    });
+
+    const url = updatedTasks[0].url.replace('{user}', username);
+    await startSpecificTask(url, limit);
   };
 
   const handleStop = async () => {
@@ -655,90 +809,146 @@ const DoubanView = () => {
          await chrome.tabs.sendMessage(tab.id, { action: 'DOUBAN_STOP' });
       }
     } catch (e) {
-       // Ignore, content script might be missing, we just reset state locally
+       // Ignore
     } finally {
-      setIsScraping(false);
-      chrome.storage.local.set({ isScrapingDouban: false });
-      chrome.storage.local.remove(['doubanStartTime']);
+      const updatedTasks = [...tasks];
+      if (currentTaskIndex >= 0 && updatedTasks[currentTaskIndex]) {
+          updatedTasks[currentTaskIndex].status = 'idle';
+          setTasks(updatedTasks);
+      }
+      finishScraping();
     }
   };
 
   const clearData = () => {
     if (confirm('Clear all scraped data?')) {
-      setBooks([]);
+      setItems([]);
       setElapsed('0m 0s');
       setStartTime(null);
+      setLogs([]);
+      setTasks(tasks.map(t => ({ ...t, status: 'idle' as const })));
     }
   };
 
-  const filteredBooks = useMemo(() => {
-    return books.filter(b => 
-       b.title.toLowerCase().includes(filterKeyword.toLowerCase()) || 
-       b.comment.toLowerCase().includes(filterKeyword.toLowerCase())
-    );
-  }, [books, filterKeyword]);
+  const currentTabTask = tasks.find(t => t.id === activeSubTab)!;
+
+  const filteredItems = useMemo(() => {
+    return items
+      .filter(b => b.type === currentTabTask.type && b.status === currentTabTask.subStatus)
+      .filter(b => 
+         b.title.toLowerCase().includes(filterKeyword.toLowerCase()) || 
+         b.comment.toLowerCase().includes(filterKeyword.toLowerCase())
+      );
+  }, [items, filterKeyword, currentTabTask]);
 
   const exportJSON = () => {
-    const blob = new Blob([JSON.stringify(filteredBooks, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(filteredItems, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `douban_export_${new Date().toISOString()}.json`;
+    a.download = `douban_${activeSubTab}_${new Date().toISOString()}.json`;
     a.click();
   };
 
   const exportMarkdown = () => {
-    const md = filteredBooks.map(b => `### [${b.title}](${b.link || '#'})\n\n**Rating**: ${b.rating} | **Date**: ${b.readDate}\n\n${b.comment}`).join('\n\n---\n\n');
+    const md = filteredItems.map(b => `### [${b.title}](${b.link || '#'})\n\n**Rating**: ${b.rating} | **Date**: ${b.readDate}\n\n${b.comment}`).join('\n\n---\n\n');
     const blob = new Blob([md], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `douban_export_${new Date().toISOString()}.md`;
+    a.download = `douban_${activeSubTab}_${new Date().toISOString()}.md`;
     a.click();
   };
 
   return (
     <div className="flex flex-col h-full bg-muted/10">
        <div className="p-4 bg-card border-b space-y-3 shrink-0">
+          
           <div className="flex items-center gap-2">
-            <div className="flex-1 flex gap-2">
-               {!isScraping ? (
-                 <button 
-                   onClick={handleStart}
-                   className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
-                 >
-                   <Play className="w-4 h-4" /> Start
-                 </button>
-               ) : (
-                 <button 
-                   onClick={handleStop}
-                   className="flex-1 flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 rounded-md hover:bg-destructive/90 transition-colors"
-                 >
-                   <Square className="w-4 h-4 fill-current" /> Stop
-                 </button>
-               )}
-            </div>
-            <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2 border">
-               <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
-               <input 
-                 type="number" 
-                 value={limit} 
-                 onChange={(e) => setLimit(Number(e.target.value))}
-                 className="w-16 bg-transparent text-sm text-right focus:outline-none"
-               />
-            </div>
+             <div className="relative flex-1">
+                <input 
+                  placeholder="Douban Username (e.g. renjiananhuo)" 
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={isScraping}
+                  className="w-full px-3 py-1.5 rounded-md border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                />
+             </div>
+             <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-1.5 border shrink-0">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
+                <input 
+                  type="number" 
+                  value={limit} 
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  disabled={isScraping}
+                  className="w-12 bg-transparent text-sm text-right focus:outline-none disabled:opacity-50"
+                />
+             </div>
           </div>
-          <div className="flex justify-between items-center text-xs text-muted-foreground">
-             <span>Scraped: <span className="font-medium text-foreground">{filteredBooks.length}</span> / {books.length}</span>
-             <span>Time: <span className="font-mono">{elapsed}</span></span>
+
+          <div className="flex items-center gap-2">
+             {!isScraping ? (
+               <>
+                 <button 
+                   onClick={handleStartCurrent}
+                   className="flex-1 flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-3 py-2 text-sm rounded-md hover:bg-secondary/80 transition-colors"
+                 >
+                   <Play className="w-3.5 h-3.5" /> Start Current
+                 </button>
+                 <button 
+                   onClick={handleStartAll}
+                   className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-3 py-2 text-sm rounded-md hover:bg-primary/90 transition-colors"
+                 >
+                   <Play className="w-3.5 h-3.5" /> Start All
+                 </button>
+               </>
+             ) : (
+               <button 
+                 onClick={handleStop}
+                 className="w-full flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 text-sm rounded-md hover:bg-destructive/90 transition-colors"
+               >
+                 <Square className="w-4 h-4 fill-current" /> Stop {isSequential ? 'Sequential' : ''} Scraping
+               </button>
+             )}
           </div>
+          
+          {/* Status Display */}
+          <div className="flex justify-between items-center text-xs pt-1 border-t">
+             <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1 text-primary font-medium">
+                   {currentTabTask.name}: <span className="font-bold">{filteredItems.length}</span>
+                </span>
+                <span className="flex items-center gap-1 text-muted-foreground border-l pl-3">
+                   Total Scraped: <span>{items.length}</span>
+                </span>
+             </div>
+             <span className="text-muted-foreground">Time: <span className="font-mono">{elapsed}</span></span>
+          </div>
+       </div>
+
+       {/* Sub Tabs */}
+       <div className="flex border-b bg-card text-xs shrink-0 overflow-x-auto">
+          {tasks.map(t => (
+             <button
+                key={t.id}
+                onClick={() => setActiveSubTab(t.id as any)}
+                className={cn(
+                   "flex-1 py-2 px-1 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5",
+                   activeSubTab === t.id ? "border-primary text-primary font-medium bg-primary/5" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )}
+             >
+                {t.name}
+                {t.status === 'running' && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                {t.status === 'done' && <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="Completed" />}
+             </button>
+          ))}
        </div>
 
        <div className="px-4 py-2 border-b bg-card/50 flex flex-wrap gap-2 items-center text-sm shrink-0">
           <div className="relative flex-1 min-w-[120px]">
              <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
              <input 
-               placeholder="Filter..." 
+               placeholder={`Filter ${currentTabTask.name}...`} 
                value={filterKeyword}
                onChange={(e) => setFilterKeyword(e.target.value)}
                className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
@@ -754,36 +964,54 @@ const DoubanView = () => {
        </div>
 
        <div className="flex-1 overflow-auto p-4 space-y-3">
-          {filteredBooks.map(book => (
-             <div key={book.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2">
-                <div className="flex justify-between items-start">
-                   <a href={book.link} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">{book.title}</a>
-                   <span className="text-xs text-muted-foreground">{book.readDate}</span>
+          {filteredItems.map(item => (
+             <div key={item.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2 relative">
+                <div className="absolute right-3 top-3 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                   {item.type === 'book' ? 'Book' : 'Movie'}
                 </div>
-                {book.rating && <div className="text-xs font-medium text-amber-500">{book.rating}</div>}
-                {book.comment && <p className="text-card-foreground leading-relaxed italic border-l-2 pl-2 border-muted-foreground/30">
-                   "{book.comment}"
+                <div className="flex justify-between items-start pr-12">
+                   <a href={item.link} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline leading-tight">{item.title}</a>
+                </div>
+                <div className="flex items-center gap-3">
+                   {item.rating && <div className="text-xs font-medium text-amber-500">{item.rating}</div>}
+                   <span className="text-xs text-muted-foreground">{item.readDate}</span>
+                </div>
+                {item.comment && <p className="text-card-foreground leading-relaxed italic border-l-2 pl-2 border-muted-foreground/30 mt-2">
+                   "{item.comment}"
                 </p>}
              </div>
           ))}
-          {books.length === 0 && (
+          {items.filter(b => b.type === currentTabTask.type && b.status === currentTabTask.subStatus).length === 0 && (
              <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
-                No data. Open a Douban collect page and click Start. <br/>
-                <span className="text-xs select-all text-primary/70 mt-2 block">https://book.douban.com/people/mobile_sang/collect</span>
+                No data for {currentTabTask.name}. <br/>
+                {!isScraping && <span className="text-xs mt-2 block">Enter a username and start scraping to populate.</span>}
+                {isScraping && currentTabTask.status === 'running' && <span className="text-xs mt-2 block flex items-center justify-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Scraping...</span>}
              </div>
           )}
        </div>
 
-       {books.length > 0 && (
+       {filteredItems.length > 0 && (
          <div className="p-3 border-t bg-card shrink-0 grid grid-cols-2 gap-2">
             <button onClick={exportJSON} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
-               <Download className="w-3.5 h-3.5" /> JSON
+               <Download className="w-3.5 h-3.5" /> JSON ({filteredItems.length})
             </button>
             <button onClick={exportMarkdown} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
-               <FileText className="w-3.5 h-3.5" /> Markdown
+               <FileText className="w-3.5 h-3.5" /> Markdown ({filteredItems.length})
             </button>
          </div>
        )}
+
+       {/* Scrolling Logs Panel */}
+       <div className="h-32 bg-[#1e1e1e] text-green-400 font-mono text-[10px] p-2 overflow-y-auto shrink-0 border-t flex flex-col gap-1 items-start leading-tight">
+          {logs.length === 0 && <span className="text-muted-foreground italic">System Idle. Logs will appear here during scraping...</span>}
+          {logs.map((log, i) => (
+             <div key={i} className="flex gap-2 w-full">
+                <span className="text-gray-500 shrink-0">[{log.time}]</span>
+                <span className="break-words">{log.msg}</span>
+             </div>
+          ))}
+          <div ref={logsEndRef} />
+       </div>
     </div>
   )
 }

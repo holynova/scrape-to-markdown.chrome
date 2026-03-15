@@ -11,6 +11,8 @@ let doubanScraper: DoubanScraper | null = null;
 // Handle auto-resume for Douban scraping (since pagination reloads page)
 DoubanScraper.checkAndResume((data) => {
    chrome.runtime.sendMessage({ action: 'DOUBAN_DATA', data }).catch(() => {});
+}, (msg) => {
+   chrome.runtime.sendMessage({ action: 'DOUBAN_LOG', msg }).catch(() => {});
 }, () => {
    chrome.runtime.sendMessage({ action: 'DOUBAN_COMPLETE' }).catch(() => {});
 }).then(scraper => {
@@ -94,6 +96,9 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
        doubanScraper = new DoubanScraper(
           (data) => {
              chrome.runtime.sendMessage({ action: 'DOUBAN_DATA', data }).catch(() => {});
+          },
+          (msg) => {
+             chrome.runtime.sendMessage({ action: 'DOUBAN_LOG', msg }).catch(() => {});
           },
           () => {
              chrome.runtime.sendMessage({ action: 'DOUBAN_COMPLETE' }).catch(() => {});
