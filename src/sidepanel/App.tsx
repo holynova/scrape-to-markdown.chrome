@@ -14,21 +14,21 @@ export interface DoubanTask {
 
 // --- Tabs Components ---
 const Tabs = ({ children }: { children: React.ReactNode }) => {
-  return <div className="grid grid-cols-3 gap-2 p-3 border-b bg-muted/20 shrink-0">{children}</div>
+  return <div className="grid grid-cols-2 gap-2 p-3 border-b bg-muted/20 shrink-0">{children}</div>
 }
 
-const TabTrigger = ({ 
-  id, 
-  active, 
-  onClick, 
-  children, 
-  icon: Icon 
-}: { 
-  id: string, 
-  active: string, 
-  onClick: (id: string) => void, 
-  children: React.ReactNode, 
-  icon?: any 
+const TabTrigger = ({
+  id,
+  active,
+  onClick,
+  children,
+  icon: Icon
+}: {
+  id: string,
+  active: string,
+  onClick: (id: string) => void,
+  children: React.ReactNode,
+  icon?: any
 }) => {
   const isActive = active === id;
   return (
@@ -64,10 +64,10 @@ const GeminiView = () => {
     const listener = (message: any) => {
       console.log('[Sidepanel] Received message:', message);
       if (message.action === 'DOWNLOAD_PROGRESS') {
-        setStatus({ 
-          type: 'loading', 
+        setStatus({
+          type: 'loading',
           message: message.message,
-          progress: message.progress 
+          progress: message.progress
         });
       } else if (message.action === 'DOWNLOAD_COMPLETE') {
         setStatus({ type: 'success', message: message.message });
@@ -84,10 +84,10 @@ const GeminiView = () => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       console.log('[Gemini] Active tab:', tab);
-      
+
       if (!tab.id) throw new Error("No active tab found");
       if (!tab.url) throw new Error("Tab URL is undefined");
-      
+
       // Check if we're on the right page
       if (!tab.url.includes('gemini.google.com')) {
         throw new Error(`Please navigate to gemini.google.com first. Current URL: ${tab.url}`);
@@ -96,7 +96,7 @@ const GeminiView = () => {
       console.log('[Gemini] Sending EXTRACT_GEMINI_IMAGES to tab:', tab.id);
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'EXTRACT_GEMINI_IMAGES' });
       console.log('[Gemini] Response:', response);
-      
+
       if (response && response.success) {
         setStatus({ type: 'loading', message: `Found ${response.count} images. Starting download...` });
       } else {
@@ -115,13 +115,13 @@ const GeminiView = () => {
         <Image className="w-5 h-5 text-primary" />
         Gemini Saver
       </h2>
-      
+
       <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-4">
         <p className="text-sm text-muted-foreground">
           Navigate to your <a href="https://gemini.google.com/mystuff" target="_blank" rel="noreferrer" className="underline text-primary">Gemini/MyStuff</a> page and click below to download all full-resolution images.
         </p>
-        
-        <button 
+
+        <button
           onClick={handleDownload}
           disabled={status.type === 'loading'}
           className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
@@ -133,9 +133,9 @@ const GeminiView = () => {
         {/* Progress bar */}
         {status.type === 'loading' && status.progress !== undefined && (
           <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary transition-all duration-300" 
-              style={{ width: `${status.progress}%` }} 
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${status.progress}%` }}
             />
           </div>
         )}
@@ -147,9 +147,9 @@ const GeminiView = () => {
             status.type === 'success' && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
             status.type === 'error' && "bg-destructive/10 text-destructive",
           )}>
-             {status.type === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
-             {status.type === 'error' && <AlertCircle className="w-4 h-4" />}
-             {status.message}
+            {status.type === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+            {status.type === 'error' && <AlertCircle className="w-4 h-4" />}
+            {status.message}
           </div>
         )}
       </div>
@@ -174,10 +174,10 @@ const PageImagesView = () => {
     const listener = (message: any) => {
       console.log('[PageImages] Received message:', message);
       if (message.action === 'DOWNLOAD_PROGRESS') {
-        setStatus({ 
-          type: 'loading', 
+        setStatus({
+          type: 'loading',
           message: message.message,
-          progress: message.progress 
+          progress: message.progress
         });
       } else if (message.action === 'DOWNLOAD_COMPLETE') {
         setStatus({ type: 'success', message: message.message });
@@ -197,14 +197,14 @@ const PageImagesView = () => {
   const handleScan = async () => {
     setStatus({ type: 'scanning', message: 'Scanning page for images...' });
     setImages([]);
-    
+
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       console.log('[PageImages] Active tab:', tab);
-      
+
       if (!tab.id) throw new Error("No active tab found");
       if (!tab.url) throw new Error("Tab URL is undefined");
-      
+
       // Check if it's a restricted page
       if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
         throw new Error("Cannot scan browser internal pages");
@@ -213,7 +213,7 @@ const PageImagesView = () => {
       console.log('[PageImages] Sending EXTRACT_PAGE_IMAGES to:', tab.url);
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'EXTRACT_PAGE_IMAGES' });
       console.log('[PageImages] Response:', response);
-      
+
       if (response && response.success) {
         setImages(response.images);
         setStatus({ type: 'idle', message: `Found ${response.images.length} images` });
@@ -233,16 +233,16 @@ const PageImagesView = () => {
 
   const handleDownload = async () => {
     if (filteredImages.length === 0) return;
-    
+
     setStatus({ type: 'loading', message: `Preparing to download ${filteredImages.length} images...` });
-    
+
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab.id) throw new Error("No active tab");
 
       const urls = filteredImages.map(img => img.url);
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'DOWNLOAD_PAGE_IMAGES', urls });
-      
+
       if (response && response.success) {
         setStatus({ type: 'loading', message: `Downloading ${response.count} images...` });
       } else {
@@ -259,10 +259,10 @@ const PageImagesView = () => {
         <Image className="w-5 h-5 text-primary" />
         Page Images
       </h2>
-      
+
       <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-4">
         {/* Scan button */}
-        <button 
+        <button
           onClick={handleScan}
           disabled={status.type === 'scanning' || status.type === 'loading'}
           className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
@@ -299,14 +299,14 @@ const PageImagesView = () => {
                 />
               </div>
             </div>
-            
+
             <div className="text-sm">
               <span className="font-medium">{filteredImages.length}</span>
               <span className="text-muted-foreground"> of {images.length} images match filter</span>
             </div>
 
             {/* Download button */}
-            <button 
+            <button
               onClick={handleDownload}
               disabled={status.type === 'loading' || filteredImages.length === 0}
               className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
@@ -320,9 +320,9 @@ const PageImagesView = () => {
         {/* Progress bar */}
         {status.type === 'loading' && status.progress !== undefined && (
           <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary transition-all duration-300" 
-              style={{ width: `${status.progress}%` }} 
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${status.progress}%` }}
             />
           </div>
         )}
@@ -353,7 +353,7 @@ const WeiboView = () => {
   const [filterKeyword, setFilterKeyword] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [showOriginalOnly, setShowOriginalOnly] = useState(false);
-  
+
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState('0m 0s');
 
@@ -375,9 +375,9 @@ const WeiboView = () => {
     const listener = (message: any) => {
       if (message.action === 'WEIBO_DATA') {
         setPosts(prev => {
-           const newItems = message.data.filter((p: WeiboPost) => !prev.some(existing => existing.id === p.id));
-           if (newItems.length === 0) return prev;
-           return [...prev, ...newItems];
+          const newItems = message.data.filter((p: WeiboPost) => !prev.some(existing => existing.id === p.id));
+          if (newItems.length === 0) return prev;
+          return [...prev, ...newItems];
         });
       }
       if (message.action === 'WEIBO_COMPLETE') {
@@ -428,11 +428,11 @@ const WeiboView = () => {
         // Exclude deleted posts
         if (content.includes('此微博已被作者删除')) return false;
         if (content.includes('该微博因违反《微博社区公约》的相关规定，已被删除')) return false;
-        
-        return content.toLowerCase().includes(filterKeyword.toLowerCase()) || 
-               p.author.toLowerCase().includes(filterKeyword.toLowerCase());
+
+        return content.toLowerCase().includes(filterKeyword.toLowerCase()) ||
+          p.author.toLowerCase().includes(filterKeyword.toLowerCase());
       });
-    
+
     if (showOriginalOnly) {
       res = res.filter(p => !p.isRetweet);
     }
@@ -467,121 +467,121 @@ const WeiboView = () => {
 
   return (
     <div className="flex flex-col h-full bg-muted/10">
-       {/* Controls */}
-       <div className="p-4 bg-card border-b space-y-3 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex gap-2">
-               {!isScraping ? (
-                 <button 
-                   onClick={handleStart}
-                   className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
-                 >
-                   <Play className="w-4 h-4" /> Start
-                 </button>
-               ) : (
-                 <button 
-                   onClick={handleStop}
-                   className="flex-1 flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 rounded-md hover:bg-destructive/90 transition-colors"
-                 >
-                   <Square className="w-4 h-4 fill-current" /> Stop
-                 </button>
-               )}
-            </div>
-            <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2 border">
-               <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
-               <input 
-                 type="number" 
-                 value={limit} 
-                 onChange={(e) => setLimit(Number(e.target.value))}
-                 className="w-16 bg-transparent text-sm text-right focus:outline-none"
-               />
-            </div>
+      {/* Controls */}
+      <div className="p-4 bg-card border-b space-y-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex gap-2">
+            {!isScraping ? (
+              <button
+                onClick={handleStart}
+                className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
+              >
+                <Play className="w-4 h-4" /> Start
+              </button>
+            ) : (
+              <button
+                onClick={handleStop}
+                className="flex-1 flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 rounded-md hover:bg-destructive/90 transition-colors"
+              >
+                <Square className="w-4 h-4 fill-current" /> Stop
+              </button>
+            )}
           </div>
-          
-          {/* Status Display */}
-          <div className="flex justify-between items-center text-xs text-muted-foreground">
-             <span>Scraped: <span className="font-medium text-foreground">{filteredPosts.length}</span> / {posts.length}</span>
-             <span>Time: <span className="font-mono">{elapsed}</span></span>
-          </div>
-
-          {/* Progress */}
-          {limit > 0 && (
-            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-               <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
-            </div>
-          )}
-       </div>
-
-       {/* Toolbar */}
-       <div className="px-4 py-2 border-b bg-card/50 flex flex-wrap gap-2 items-center text-sm shrink-0">
-          <div className="relative flex-1 min-w-[120px]">
-             <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-             <input 
-               placeholder="Filter..." 
-               value={filterKeyword}
-               onChange={(e) => setFilterKeyword(e.target.value)}
-               className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-             />
-          </div>
-          
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
-            <input 
-              type="checkbox"
-              checked={showOriginalOnly}
-              onChange={(e) => setShowOriginalOnly(e.target.checked)}
-              className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+          <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2 border">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
+            <input
+              type="number"
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              className="w-16 bg-transparent text-sm text-right focus:outline-none"
             />
-            Original
-          </label>
+          </div>
+        </div>
 
-          <div className="h-4 w-px bg-border mx-1"></div>
+        {/* Status Display */}
+        <div className="flex justify-between items-center text-xs text-muted-foreground">
+          <span>Scraped: <span className="font-medium text-foreground">{filteredPosts.length}</span> / {posts.length}</span>
+          <span>Time: <span className="font-mono">{elapsed}</span></span>
+        </div>
 
-          <button 
-             onClick={() => setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')}
-             className="p-1.5 hover:bg-muted rounded text-muted-foreground"
-             title="Sort Order"
-          >
-             <ArrowUpDown className={cn("w-4 h-4", sortOrder === 'oldest' && "rotate-180")} />
+        {/* Progress */}
+        {limit > 0 && (
+          <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
+          </div>
+        )}
+      </div>
+
+      {/* Toolbar */}
+      <div className="px-4 py-2 border-b bg-card/50 flex flex-wrap gap-2 items-center text-sm shrink-0">
+        <div className="relative flex-1 min-w-[120px]">
+          <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            placeholder="Filter..."
+            value={filterKeyword}
+            onChange={(e) => setFilterKeyword(e.target.value)}
+            className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
+          <input
+            type="checkbox"
+            checked={showOriginalOnly}
+            onChange={(e) => setShowOriginalOnly(e.target.checked)}
+            className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+          />
+          Original
+        </label>
+
+        <div className="h-4 w-px bg-border mx-1"></div>
+
+        <button
+          onClick={() => setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')}
+          className="p-1.5 hover:bg-muted rounded text-muted-foreground"
+          title="Sort Order"
+        >
+          <ArrowUpDown className={cn("w-4 h-4", sortOrder === 'oldest' && "rotate-180")} />
+        </button>
+        <button
+          onClick={clearData}
+          className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded text-muted-foreground"
+          title="Clear Data"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* List */}
+      <div className="flex-1 overflow-auto p-4 space-y-3">
+        {filteredPosts.map(post => (
+          <div key={post.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2">
+            <div className="flex justify-between items-start">
+              <span className="font-semibold text-primary">{post.publishTime}</span>
+            </div>
+            <p className="text-card-foreground leading-relaxed line-clamp-4 hover:line-clamp-none transition-all">
+              {post.content}
+            </p>
+          </div>
+        ))}
+        {posts.length === 0 && (
+          <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
+            No data. Open a Weibo user page and click Start.
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      {posts.length > 0 && (
+        <div className="p-3 border-t bg-card shrink-0 grid grid-cols-2 gap-2">
+          <button onClick={exportJSON} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
+            <Download className="w-3.5 h-3.5" /> JSON
           </button>
-          <button 
-             onClick={clearData}
-             className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded text-muted-foreground"
-             title="Clear Data"
-          >
-             <Trash2 className="w-4 h-4" />
+          <button onClick={exportMarkdown} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
+            <FileText className="w-3.5 h-3.5" /> Markdown
           </button>
-       </div>
-
-       {/* List */}
-       <div className="flex-1 overflow-auto p-4 space-y-3">
-          {filteredPosts.map(post => (
-             <div key={post.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2">
-                <div className="flex justify-between items-start">
-                   <span className="font-semibold text-primary">{post.publishTime}</span>
-                </div>
-                <p className="text-card-foreground leading-relaxed line-clamp-4 hover:line-clamp-none transition-all">
-                   {post.content}
-                </p>
-             </div>
-          ))}
-          {posts.length === 0 && (
-             <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
-                No data. Open a Weibo user page and click Start.
-             </div>
-          )}
-       </div>
-
-       {/* Footer */}
-       {posts.length > 0 && (
-         <div className="p-3 border-t bg-card shrink-0 grid grid-cols-2 gap-2">
-            <button onClick={exportJSON} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
-               <Download className="w-3.5 h-3.5" /> JSON
-            </button>
-            <button onClick={exportMarkdown} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
-               <FileText className="w-3.5 h-3.5" /> Markdown
-            </button>
-         </div>
-       )}
+        </div>
+      )}
     </div>
   )
 }
@@ -593,7 +593,7 @@ const DoubanView = () => {
   const [items, setItems] = useState<DoubanItem[]>([]);
   const [filterKeyword, setFilterKeyword] = useState('');
   const [activeSubTab, setActiveSubTab] = useState<'book-wish' | 'book-collect' | 'movie-wish' | 'movie-collect'>('book-collect');
-  
+
   // Sequential task state
   const [tasks, setTasks] = useState<DoubanTask[]>([
     { id: 'book-wish', name: 'Book Wish', url: 'https://book.douban.com/people/{user}/wish', status: 'idle', type: 'book', subStatus: 'wish' },
@@ -606,14 +606,14 @@ const DoubanView = () => {
 
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState('0m 0s');
-  
-  const [logs, setLogs] = useState<{time: string, msg: string}[]>([]);
+
+  const [logs, setLogs] = useState<{ time: string, msg: string }[]>([]);
   const logsEndRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-     if (logsEndRef.current) {
-        logsEndRef.current.scrollIntoView({ behavior: "smooth" });
-     }
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   }, [logs]);
 
   useEffect(() => {
@@ -633,29 +633,29 @@ const DoubanView = () => {
   // Read stored state on mount
   useEffect(() => {
     chrome.storage.local.get([
-       'isScrapingDouban', 
-       'doubanStartTime', 
-       'doubanTasks', 
-       'doubanSequential', 
-       'doubanCurrentTaskIndex',
-       'doubanUsername'
+      'isScrapingDouban',
+      'doubanStartTime',
+      'doubanTasks',
+      'doubanSequential',
+      'doubanCurrentTaskIndex',
+      'doubanUsername'
     ]).then(data => {
       if (data.isScrapingDouban) {
-         setIsScraping(true);
-         setStartTime((data.doubanStartTime as number) || Date.now());
-         if (data.doubanTasks) setTasks(data.doubanTasks as any[]);
-         if (data.doubanSequential) setIsSequential(true);
-         if (data.doubanCurrentTaskIndex !== undefined) setCurrentTaskIndex(data.doubanCurrentTaskIndex as number);
-         if (data.doubanUsername) setUsername(data.doubanUsername as string);
+        setIsScraping(true);
+        setStartTime((data.doubanStartTime as number) || Date.now());
+        if (data.doubanTasks) setTasks(data.doubanTasks as any[]);
+        if (data.doubanSequential) setIsSequential(true);
+        if (data.doubanCurrentTaskIndex !== undefined) setCurrentTaskIndex(data.doubanCurrentTaskIndex as number);
+        if (data.doubanUsername) setUsername(data.doubanUsername as string);
       }
     });
 
     const listener = (message: any) => {
       if (message.action === 'DOUBAN_DATA') {
         setItems(prev => {
-           const newItems = message.data.filter((p: DoubanItem) => !prev.some(existing => existing.id === p.id));
-           if (newItems.length === 0) return prev;
-           return [...prev, ...newItems];
+          const newItems = message.data.filter((p: DoubanItem) => !prev.some(existing => existing.id === p.id));
+          if (newItems.length === 0) return prev;
+          return [...prev, ...newItems];
         });
       }
       if (message.action === 'DOUBAN_COMPLETE') {
@@ -673,86 +673,86 @@ const DoubanView = () => {
   // Using a ref to access latest state inside listeners/handlers without dependency cycles
   const stateRef = React.useRef({ isSequential, currentTaskIndex, tasks, username, limit });
   useEffect(() => {
-     stateRef.current = { isSequential, currentTaskIndex, tasks, username, limit };
+    stateRef.current = { isSequential, currentTaskIndex, tasks, username, limit };
   }, [isSequential, currentTaskIndex, tasks, username, limit]);
 
   const handleTaskComplete = async () => {
-     const { isSequential, currentTaskIndex, tasks, username, limit } = stateRef.current;
-     
-     if (isSequential && currentTaskIndex >= 0 && currentTaskIndex < tasks.length) {
-        // Mark current as done
-        const updatedTasks = [...tasks];
-        updatedTasks[currentTaskIndex].status = 'done';
+    const { isSequential, currentTaskIndex, tasks, username, limit } = stateRef.current;
+
+    if (isSequential && currentTaskIndex >= 0 && currentTaskIndex < tasks.length) {
+      // Mark current as done
+      const updatedTasks = [...tasks];
+      updatedTasks[currentTaskIndex].status = 'done';
+      setTasks(updatedTasks);
+      chrome.storage.local.set({ doubanTasks: updatedTasks });
+
+      const nextIndex = currentTaskIndex + 1;
+      if (nextIndex < tasks.length) {
+        // Move to next
+        setCurrentTaskIndex(nextIndex);
+        chrome.storage.local.set({ doubanCurrentTaskIndex: nextIndex });
+
+        // Start next task
+        updatedTasks[nextIndex].status = 'running';
         setTasks(updatedTasks);
         chrome.storage.local.set({ doubanTasks: updatedTasks });
 
-        const nextIndex = currentTaskIndex + 1;
-        if (nextIndex < tasks.length) {
-           // Move to next
-           setCurrentTaskIndex(nextIndex);
-           chrome.storage.local.set({ doubanCurrentTaskIndex: nextIndex });
-           
-           // Start next task
-           updatedTasks[nextIndex].status = 'running';
-           setTasks(updatedTasks);
-           chrome.storage.local.set({ doubanTasks: updatedTasks });
-           
-           setActiveSubTab(updatedTasks[nextIndex].id as any);
-           startSpecificTask(updatedTasks[nextIndex].url.replace('{user}', username), limit);
-        } else {
-           // All done
-           finishScraping();
-        }
-     } else {
-        // Single task mode finish
-        if (currentTaskIndex >= 0) {
-           const updatedTasks = [...tasks];
-           updatedTasks[currentTaskIndex].status = 'done';
-           setTasks(updatedTasks);
-        }
+        setActiveSubTab(updatedTasks[nextIndex].id as any);
+        startSpecificTask(updatedTasks[nextIndex].url.replace('{user}', username), limit);
+      } else {
+        // All done
         finishScraping();
-     }
+      }
+    } else {
+      // Single task mode finish
+      if (currentTaskIndex >= 0) {
+        const updatedTasks = [...tasks];
+        updatedTasks[currentTaskIndex].status = 'done';
+        setTasks(updatedTasks);
+      }
+      finishScraping();
+    }
   };
 
   const finishScraping = () => {
-      setIsScraping(false);
-      setIsSequential(false);
-      setCurrentTaskIndex(-1);
-      chrome.storage.local.set({ 
-         isScrapingDouban: false,
-         doubanSequential: false,
-         doubanCurrentTaskIndex: -1
-      });
-      chrome.storage.local.remove(['doubanStartTime', 'doubanTasks']);
+    setIsScraping(false);
+    setIsSequential(false);
+    setCurrentTaskIndex(-1);
+    chrome.storage.local.set({
+      isScrapingDouban: false,
+      doubanSequential: false,
+      doubanCurrentTaskIndex: -1
+    });
+    chrome.storage.local.remove(['doubanStartTime', 'doubanTasks']);
   };
 
   const startSpecificTask = async (targetUrl: string, limitVal: number) => {
-      try {
-         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-         if (!tab.id) return;
-         
-         // Navigate to the target URL
-         await chrome.tabs.update(tab.id, { url: targetUrl });
-         
-         // Wait for page to load then inject start command
-         // Since it's a new navigation, the content script will re-initialize
-         // We set the storage state, so `DoubanScraper.checkAndResume` will automatically pick it up!
-         // We just need to ensure `isScrapingDouban` is true in storage.
-         chrome.storage.local.set({ isScrapingDouban: true, doubanLimit: limitVal });
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab.id) return;
 
-      } catch (e: any) {
-         console.error('Navigation failed', e);
-         finishScraping();
-      }
+      // Navigate to the target URL
+      await chrome.tabs.update(tab.id, { url: targetUrl });
+
+      // Wait for page to load then inject start command
+      // Since it's a new navigation, the content script will re-initialize
+      // We set the storage state, so `DoubanScraper.checkAndResume` will automatically pick it up!
+      // We just need to ensure `isScrapingDouban` is true in storage.
+      chrome.storage.local.set({ isScrapingDouban: true, doubanLimit: limitVal });
+
+    } catch (e: any) {
+      console.error('Navigation failed', e);
+      finishScraping();
+    }
   };
 
   const handleStartCurrent = async () => {
     if (!username) return alert('Please enter a username');
-    
+
     // Find index of active tab
     const idx = tasks.findIndex(t => t.id === activeSubTab);
     const task = tasks[idx];
-    
+
     const updatedTasks = tasks.map((t): DoubanTask => ({ ...t, status: 'idle' }));
     updatedTasks[idx].status = 'running';
     setTasks(updatedTasks);
@@ -763,13 +763,13 @@ const DoubanView = () => {
     const now = Date.now();
     setStartTime(now);
     setElapsed('0m 0s');
-    
-    chrome.storage.local.set({ 
-       doubanStartTime: now,
-       doubanTasks: updatedTasks,
-       doubanSequential: false,
-       doubanCurrentTaskIndex: idx,
-       doubanUsername: username
+
+    chrome.storage.local.set({
+      doubanStartTime: now,
+      doubanTasks: updatedTasks,
+      doubanSequential: false,
+      doubanCurrentTaskIndex: idx,
+      doubanUsername: username
     });
 
     const url = task.url.replace('{user}', username);
@@ -778,7 +778,7 @@ const DoubanView = () => {
 
   const handleStartAll = async () => {
     if (!username) return alert('Please enter a username');
-    
+
     const updatedTasks = tasks.map((t, i) => ({ ...t, status: i === 0 ? 'running' as const : 'idle' as const }));
     setTasks(updatedTasks);
     setCurrentTaskIndex(0);
@@ -789,13 +789,13 @@ const DoubanView = () => {
     const now = Date.now();
     setStartTime(now);
     setElapsed('0m 0s');
-    
-    chrome.storage.local.set({ 
-       doubanStartTime: now,
-       doubanTasks: updatedTasks,
-       doubanSequential: true,
-       doubanCurrentTaskIndex: 0,
-       doubanUsername: username
+
+    chrome.storage.local.set({
+      doubanStartTime: now,
+      doubanTasks: updatedTasks,
+      doubanSequential: true,
+      doubanCurrentTaskIndex: 0,
+      doubanUsername: username
     });
 
     const url = updatedTasks[0].url.replace('{user}', username);
@@ -806,15 +806,15 @@ const DoubanView = () => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) {
-         await chrome.tabs.sendMessage(tab.id, { action: 'DOUBAN_STOP' });
+        await chrome.tabs.sendMessage(tab.id, { action: 'DOUBAN_STOP' });
       }
     } catch (e) {
-       // Ignore
+      // Ignore
     } finally {
       const updatedTasks = [...tasks];
       if (currentTaskIndex >= 0 && updatedTasks[currentTaskIndex]) {
-          updatedTasks[currentTaskIndex].status = 'idle';
-          setTasks(updatedTasks);
+        updatedTasks[currentTaskIndex].status = 'idle';
+        setTasks(updatedTasks);
       }
       finishScraping();
     }
@@ -835,9 +835,9 @@ const DoubanView = () => {
   const filteredItems = useMemo(() => {
     return items
       .filter(b => b.type === currentTabTask.type && b.status === currentTabTask.subStatus)
-      .filter(b => 
-         b.title.toLowerCase().includes(filterKeyword.toLowerCase()) || 
-         b.comment.toLowerCase().includes(filterKeyword.toLowerCase())
+      .filter(b =>
+        b.title.toLowerCase().includes(filterKeyword.toLowerCase()) ||
+        b.comment.toLowerCase().includes(filterKeyword.toLowerCase())
       );
   }, [items, filterKeyword, currentTabTask]);
 
@@ -862,163 +862,163 @@ const DoubanView = () => {
 
   return (
     <div className="flex flex-col h-full bg-muted/10">
-       <div className="p-4 bg-card border-b space-y-3 shrink-0">
-          
-          <div className="flex items-center gap-2">
-             <div className="relative flex-1">
-                <input 
-                  placeholder="Douban Username (e.g. renjiananhuo)" 
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  disabled={isScraping}
-                  className="w-full px-3 py-1.5 rounded-md border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-                />
-             </div>
-             <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-1.5 border shrink-0">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
-                <input 
-                  type="number" 
-                  value={limit} 
-                  onChange={(e) => setLimit(Number(e.target.value))}
-                  disabled={isScraping}
-                  className="w-12 bg-transparent text-sm text-right focus:outline-none disabled:opacity-50"
-                />
-             </div>
-          </div>
+      <div className="p-4 bg-card border-b space-y-3 shrink-0">
 
-          <div className="flex items-center gap-2">
-             {!isScraping ? (
-               <>
-                 <button 
-                   onClick={handleStartCurrent}
-                   className="flex-1 flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-3 py-2 text-sm rounded-md hover:bg-secondary/80 transition-colors"
-                 >
-                   <Play className="w-3.5 h-3.5" /> Start Current
-                 </button>
-                 <button 
-                   onClick={handleStartAll}
-                   className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-3 py-2 text-sm rounded-md hover:bg-primary/90 transition-colors"
-                 >
-                   <Play className="w-3.5 h-3.5" /> Start All
-                 </button>
-               </>
-             ) : (
-               <button 
-                 onClick={handleStop}
-                 className="w-full flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 text-sm rounded-md hover:bg-destructive/90 transition-colors"
-               >
-                 <Square className="w-4 h-4 fill-current" /> Stop {isSequential ? 'Sequential' : ''} Scraping
-               </button>
-             )}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              placeholder="Douban Username (e.g. renjiananhuo)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              disabled={isScraping}
+              className="w-full px-3 py-1.5 rounded-md border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+            />
           </div>
-          
-          {/* Status Display */}
-          <div className="flex justify-between items-center text-xs pt-1 border-t">
-             <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1 text-primary font-medium">
-                   {currentTabTask.name}: <span className="font-bold">{filteredItems.length}</span>
-                </span>
-                <span className="flex items-center gap-1 text-muted-foreground border-l pl-3">
-                   Total Scraped: <span>{items.length}</span>
-                </span>
-             </div>
-             <span className="text-muted-foreground">Time: <span className="font-mono">{elapsed}</span></span>
+          <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-1.5 border shrink-0">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
+            <input
+              type="number"
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              disabled={isScraping}
+              className="w-12 bg-transparent text-sm text-right focus:outline-none disabled:opacity-50"
+            />
           </div>
-       </div>
+        </div>
 
-       {/* Sub Tabs */}
-       <div className="flex border-b bg-card text-xs shrink-0 overflow-x-auto">
-          {tasks.map(t => (
-             <button
-                key={t.id}
-                onClick={() => setActiveSubTab(t.id as any)}
-                className={cn(
-                   "flex-1 py-2 px-1 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5",
-                   activeSubTab === t.id ? "border-primary text-primary font-medium bg-primary/5" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                )}
-             >
-                {t.name}
-                {t.status === 'running' && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-                {t.status === 'done' && <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="Completed" />}
-             </button>
-          ))}
-       </div>
-
-       <div className="px-4 py-2 border-b bg-card/50 flex flex-wrap gap-2 items-center text-sm shrink-0">
-          <div className="relative flex-1 min-w-[120px]">
-             <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-             <input 
-               placeholder={`Filter ${currentTabTask.name}...`} 
-               value={filterKeyword}
-               onChange={(e) => setFilterKeyword(e.target.value)}
-               className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-             />
-          </div>
-          <button 
-             onClick={clearData}
-             className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded text-muted-foreground"
-             title="Clear Data"
-          >
-             <Trash2 className="w-4 h-4" />
-          </button>
-       </div>
-
-       <div className="flex-1 overflow-auto p-4 space-y-3">
-          {filteredItems.map(item => (
-             <div key={item.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2 relative">
-                <div className="absolute right-3 top-3 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                   {item.type === 'book' ? 'Book' : 'Movie'}
-                </div>
-                <div className="flex justify-between items-start pr-12">
-                   <a href={item.link} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline leading-tight">{item.title}</a>
-                </div>
-                <div className="flex items-center gap-3">
-                   {item.rating && <div className="text-xs font-medium text-amber-500">{item.rating}</div>}
-                   <span className="text-xs text-muted-foreground">{item.readDate}</span>
-                </div>
-                {item.comment && <p className="text-card-foreground leading-relaxed italic border-l-2 pl-2 border-muted-foreground/30 mt-2">
-                   "{item.comment}"
-                </p>}
-             </div>
-          ))}
-          {items.filter(b => b.type === currentTabTask.type && b.status === currentTabTask.subStatus).length === 0 && (
-             <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
-                No data for {currentTabTask.name}. <br/>
-                {!isScraping && <span className="text-xs mt-2 block">Enter a username and start scraping to populate.</span>}
-                {isScraping && currentTabTask.status === 'running' && <span className="text-xs mt-2 block flex items-center justify-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Scraping...</span>}
-             </div>
+        <div className="flex items-center gap-2">
+          {!isScraping ? (
+            <>
+              <button
+                onClick={handleStartCurrent}
+                className="flex-1 flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-3 py-2 text-sm rounded-md hover:bg-secondary/80 transition-colors"
+              >
+                <Play className="w-3.5 h-3.5" /> Start Current
+              </button>
+              <button
+                onClick={handleStartAll}
+                className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-3 py-2 text-sm rounded-md hover:bg-primary/90 transition-colors"
+              >
+                <Play className="w-3.5 h-3.5" /> Start All
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleStop}
+              className="w-full flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 text-sm rounded-md hover:bg-destructive/90 transition-colors"
+            >
+              <Square className="w-4 h-4 fill-current" /> Stop {isSequential ? 'Sequential' : ''} Scraping
+            </button>
           )}
-       </div>
+        </div>
 
-       {filteredItems.length > 0 && (
-         <div className="p-3 border-t bg-card shrink-0 grid grid-cols-2 gap-2">
-            <button onClick={exportJSON} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
-               <Download className="w-3.5 h-3.5" /> JSON ({filteredItems.length})
-            </button>
-            <button onClick={exportMarkdown} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
-               <FileText className="w-3.5 h-3.5" /> Markdown ({filteredItems.length})
-            </button>
-         </div>
-       )}
+        {/* Status Display */}
+        <div className="flex justify-between items-center text-xs pt-1 border-t">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-primary font-medium">
+              {currentTabTask.name}: <span className="font-bold">{filteredItems.length}</span>
+            </span>
+            <span className="flex items-center gap-1 text-muted-foreground border-l pl-3">
+              Total Scraped: <span>{items.length}</span>
+            </span>
+          </div>
+          <span className="text-muted-foreground">Time: <span className="font-mono">{elapsed}</span></span>
+        </div>
+      </div>
 
-       {/* Scrolling Logs Panel */}
-       <div className="h-32 bg-[#1e1e1e] text-green-400 font-mono text-[10px] p-2 overflow-y-auto shrink-0 border-t flex flex-col gap-1 items-start leading-tight">
-          {logs.length === 0 && <span className="text-muted-foreground italic">System Idle. Logs will appear here during scraping...</span>}
-          {logs.map((log, i) => (
-             <div key={i} className="flex gap-2 w-full">
-                <span className="text-gray-500 shrink-0">[{log.time}]</span>
-                <span className="break-words">{log.msg}</span>
-             </div>
-          ))}
-          <div ref={logsEndRef} />
-       </div>
+      {/* Sub Tabs */}
+      <div className="flex border-b bg-card text-xs shrink-0 overflow-x-auto">
+        {tasks.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setActiveSubTab(t.id as any)}
+            className={cn(
+              "flex-1 py-2 px-1 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5",
+              activeSubTab === t.id ? "border-primary text-primary font-medium bg-primary/5" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            )}
+          >
+            {t.name}
+            {t.status === 'running' && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+            {t.status === 'done' && <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="Completed" />}
+          </button>
+        ))}
+      </div>
+
+      <div className="px-4 py-2 border-b bg-card/50 flex flex-wrap gap-2 items-center text-sm shrink-0">
+        <div className="relative flex-1 min-w-[120px]">
+          <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            placeholder={`Filter ${currentTabTask.name}...`}
+            value={filterKeyword}
+            onChange={(e) => setFilterKeyword(e.target.value)}
+            className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <button
+          onClick={clearData}
+          className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded text-muted-foreground"
+          title="Clear Data"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-auto p-4 space-y-3">
+        {filteredItems.map(item => (
+          <div key={item.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2 relative">
+            <div className="absolute right-3 top-3 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+              {item.type === 'book' ? 'Book' : 'Movie'}
+            </div>
+            <div className="flex justify-between items-start pr-12">
+              <a href={item.link} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline leading-tight">{item.title}</a>
+            </div>
+            <div className="flex items-center gap-3">
+              {item.rating && <div className="text-xs font-medium text-amber-500">{item.rating}</div>}
+              <span className="text-xs text-muted-foreground">{item.readDate}</span>
+            </div>
+            {item.comment && <p className="text-card-foreground leading-relaxed italic border-l-2 pl-2 border-muted-foreground/30 mt-2">
+              "{item.comment}"
+            </p>}
+          </div>
+        ))}
+        {items.filter(b => b.type === currentTabTask.type && b.status === currentTabTask.subStatus).length === 0 && (
+          <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
+            No data for {currentTabTask.name}. <br />
+            {!isScraping && <span className="text-xs mt-2 block">Enter a username and start scraping to populate.</span>}
+            {isScraping && currentTabTask.status === 'running' && <span className="text-xs mt-2 block flex items-center justify-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Scraping...</span>}
+          </div>
+        )}
+      </div>
+
+      {filteredItems.length > 0 && (
+        <div className="p-3 border-t bg-card shrink-0 grid grid-cols-2 gap-2">
+          <button onClick={exportJSON} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
+            <Download className="w-3.5 h-3.5" /> JSON ({filteredItems.length})
+          </button>
+          <button onClick={exportMarkdown} className="flex items-center justify-center gap-2 px-3 py-2 text-xs border rounded hover:bg-muted transition-colors">
+            <FileText className="w-3.5 h-3.5" /> Markdown ({filteredItems.length})
+          </button>
+        </div>
+      )}
+
+      {/* Scrolling Logs Panel */}
+      <div className="h-32 bg-[#1e1e1e] text-green-400 font-mono text-[10px] p-2 overflow-y-auto shrink-0 border-t flex flex-col gap-1 items-start leading-tight">
+        {logs.length === 0 && <span className="text-muted-foreground italic">System Idle. Logs will appear here during scraping...</span>}
+        {logs.map((log, i) => (
+          <div key={i} className="flex gap-2 w-full">
+            <span className="text-gray-500 shrink-0">[{log.time}]</span>
+            <span className="break-words">{log.msg}</span>
+          </div>
+        ))}
+        <div ref={logsEndRef} />
+      </div>
     </div>
   )
 }
 
 const MarkdownView = () => {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{title: string, markdown: string, excerpt?: string} | null>(null);
+  const [result, setResult] = useState<{ title: string, markdown: string, excerpt?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleConvert = async () => {
@@ -1033,9 +1033,9 @@ const MarkdownView = () => {
       if (tab.url?.startsWith("chrome://") || tab.url?.startsWith("edge://")) {
         throw new Error("Cannot run on browser system pages.");
       }
-      
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'SCRAPE_MARKDOWN' });
-      
+
       if (response && response.success) {
         setResult(response.data);
       } else {
@@ -1076,26 +1076,26 @@ const MarkdownView = () => {
           Page to Markdown
           {loading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
         </h2>
-        
+
         {error && (
-           <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-md flex items-center gap-2">
-             <AlertCircle className="w-4 h-4" />
-             {error}
-           </div>
+          <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-md flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            {error}
+          </div>
         )}
 
         {!result && (
           <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Convert the current main content to Markdown.
-              </p>
-              <button 
-                onClick={handleConvert}
-                disabled={loading}
-                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all"
-              >
-                {loading ? 'Converting...' : 'Convert Current Page'}
-              </button>
+            <p className="text-sm text-muted-foreground">
+              Convert the current main content to Markdown.
+            </p>
+            <button
+              onClick={handleConvert}
+              disabled={loading}
+              className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all"
+            >
+              {loading ? 'Converting...' : 'Convert Current Page'}
+            </button>
           </div>
         )}
       </div>
@@ -1103,20 +1103,20 @@ const MarkdownView = () => {
       {result && (
         <div className="flex-1 overflow-hidden flex flex-col min-h-0 border-t bg-card">
           <div className="p-2 border-b bg-muted/10 flex items-center justify-between shrink-0">
-             <div className="font-medium text-sm truncate max-w-[200px]" title={result.title}>
-               {result.title}
-             </div>
-             <div className="flex gap-1">
-                <button onClick={handleCopy} className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground" title="Copy">
-                  <Copy className="w-4 h-4" />
-                </button>
-                <button onClick={handleDownload} className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground" title="Download">
-                  <Download className="w-4 h-4" />
-                </button>
-                <button onClick={() => setResult(null)} className="px-3 py-1 text-xs hover:underline text-muted-foreground">
-                   Reset
-                </button>
-             </div>
+            <div className="font-medium text-sm truncate max-w-[200px]" title={result.title}>
+              {result.title}
+            </div>
+            <div className="flex gap-1">
+              <button onClick={handleCopy} className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground" title="Copy">
+                <Copy className="w-4 h-4" />
+              </button>
+              <button onClick={handleDownload} className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground" title="Download">
+                <Download className="w-4 h-4" />
+              </button>
+              <button onClick={() => setResult(null)} className="px-3 py-1 text-xs hover:underline text-muted-foreground">
+                Reset
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-auto p-4 text-sm font-mono whitespace-pre-wrap">
             {result.markdown}
@@ -1148,7 +1148,7 @@ function App() {
         </div>
         <h1 className="font-bold tracking-tight text-sm">Scrape to Markdown</h1>
       </header> */}
-      
+
       <Tabs>
         <TabTrigger id="weibo" active={activeTab} onClick={setActiveTab} icon={MessagesSquare}>
           Weibo
@@ -1175,7 +1175,7 @@ function App() {
         {activeTab === 'gemini' && <GeminiView />}
         {activeTab === 'images' && <PageImagesView />}
       </main>
-      
+
       {/* Build version footer */}
       <footer className="px-4 py-1 border-t bg-muted/20 text-xs text-muted-foreground text-center shrink-0">
         Build: {new Date(__BUILD_TIMESTAMP__).toLocaleString()}
