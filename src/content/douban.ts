@@ -130,7 +130,10 @@ export class DoubanScraper {
             id = match[1];
          }
       }
-      if (!id) id = this.hash(title + (new Date().getTime()));
+      if (!id) {
+         // Fallback: Deterministic hash of stable fields
+         id = this.hash(title + link + type + status);
+      }
 
       let rating = '';
       const ratingEl = card.querySelector('.info .short-note [class^="rating"], .date [class^="rating"], span[class^="rating"]');
