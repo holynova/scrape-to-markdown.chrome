@@ -353,6 +353,9 @@ const WeiboView = () => {
   const [filterKeyword, setFilterKeyword] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [showOriginalOnly, setShowOriginalOnly] = useState(false);
+  const [hideEmptyContent, setHideEmptyContent] = useState(true);
+  const [hideImagesOnly, setHideImagesOnly] = useState(false);
+  const [hideVideosOnly, setHideVideosOnly] = useState(false);
 
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState('0m 0s');
@@ -422,9 +425,14 @@ const WeiboView = () => {
   };
 
   const filteredPosts = useMemo(() => {
-    let res = posts.filter(p => p.content && p.content.trim() !== '') // Filter out null/empty content
-      .filter(p => {
-        const content = p.content;
+    let res = [...posts];
+    
+    if (hideEmptyContent) {
+      res = res.filter(p => p.content && p.content.trim() !== '');
+    }
+
+    res = res.filter(p => {
+        const content = p.content || '';
         // Exclude deleted posts
         if (content.includes('此微博已被作者删除')) return false;
         if (content.includes('该微博因违反《微博社区公约》的相关规定，已被删除')) return false;
@@ -437,12 +445,21 @@ const WeiboView = () => {
       res = res.filter(p => !p.isRetweet);
     }
 
-    // Assuming scraped order is roughly 'newest' first (top of page down)
+    if (hideImagesOnly) {
+      // Filter out posts that have images but almost no text
+      res = res.filter(p => !(p.hasImages && (!p.content || p.content.trim().length < 2 || p.content === '分享图片')));
+    }
+
+    if (hideVideosOnly) {
+      // Filter out posts that have videos but almost no text
+      res = res.filter(p => !(p.hasVideos && (!p.content || p.content.trim().length < 2)));
+    }
+
     if (sortOrder === 'oldest') {
       res = [...res].reverse();
     }
     return res;
-  }, [posts, filterKeyword, sortOrder, showOriginalOnly]);
+  }, [posts, filterKeyword, sortOrder, showOriginalOnly, hideEmptyContent, hideImagesOnly, hideVideosOnly]);
 
   const progress = limit > 0 ? Math.min((posts.length / limit) * 100, 100) : 0;
 
@@ -532,6 +549,36 @@ const WeiboView = () => {
             className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
           />
           Original
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
+          <input
+            type="checkbox"
+            checked={hideEmptyContent}
+            onChange={(e) => setHideEmptyContent(e.target.checked)}
+            className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+          />
+          No Empty
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
+          <input
+            type="checkbox"
+            checked={hideImagesOnly}
+            onChange={(e) => setHideImagesOnly(e.target.checked)}
+            className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+          />
+          No Img-Only
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
+          <input
+            type="checkbox"
+            checked={hideVideosOnly}
+            onChange={(e) => setHideVideosOnly(e.target.checked)}
+            className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+          />
+          No Vid-Only
         </label>
 
         <div className="h-4 w-px bg-border mx-1"></div>

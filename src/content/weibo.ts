@@ -5,6 +5,8 @@ export interface WeiboPost {
   publishTime: string;
   link?: string;
   isRetweet?: boolean;
+  hasImages?: boolean;
+  hasVideos?: boolean;
 }
 
 export class WeiboScraper {
@@ -203,7 +205,11 @@ export class WeiboScraper {
       if (!content && !mid) return;
       if (this.scrapedIds.has(mid)) return;
 
-      // --- 5. Retweet Detection ---
+      // --- 5. Media Detection ---
+      const hasImages = !!card.querySelector('.wbpro-media-a, .woo-picture-main, .media-piclist, [class*="piclist"]');
+      const hasVideos = !!card.querySelector('.woo-video-main, .media-video, video, [class*="video"]');
+
+      // --- 6. Retweet Detection ---
       let isRetweet = false;
       const contentNode = card.querySelector('[contenttype]');
       if (contentNode) {
@@ -211,10 +217,18 @@ export class WeiboScraper {
           if (type && type !== 'original') {
               isRetweet = true;
           }
-      } else {
-          if (card.querySelector('.feed_list_forwardContent, .wbpro-feed-repost')) {
+      }
+      
+      if (!isRetweet) {
+          if (card.querySelector('.feed_list_forwardContent, .wbpro-feed-repost, [class*="repost"], [class*="forward"]')) {
               isRetweet = true;
           }
+      }
+
+      // Fallback structure detection for retweets
+      if (!isRetweet) {
+          const repostSection = card.querySelector('.wbpro-feed-repost, .detail_subtext');
+          if (repostSection) isRetweet = true;
       }
 
       const post: WeiboPost = {
@@ -223,7 +237,9 @@ export class WeiboScraper {
         content,
         publishTime,
         link,
-        isRetweet
+        isRetweet,
+        hasImages,
+        hasVideos
       };
 
       this.scrapedIds.add(mid);
