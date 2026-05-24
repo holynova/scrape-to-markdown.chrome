@@ -5,6 +5,8 @@ export interface WeiboPost {
   publishTime: string;
   link?: string;
   isRetweet?: boolean;
+  hasImages?: boolean;
+  hasVideos?: boolean;
 }
 
 export interface DoubanItem {
