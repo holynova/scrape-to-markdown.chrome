@@ -1,3 +1,13 @@
+## 1.1.5 - 2026-05-24
+
+### Features
+- Add a simplified Chrome extension icon optimized for small toolbar sizes.
+- Refine AI Image Saver into a source-driven task panel with task summary and clearer logs.
+- Auto-select the initial side-panel tab based on the active website.
+
+### Documentation
+- Rewrite README with updated feature descriptions and screenshots.
+
 ## 1.1.4 - 2026-05-24
 
 ### Features
