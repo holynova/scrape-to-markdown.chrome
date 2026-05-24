@@ -74,35 +74,75 @@ const formatBuildTimestamp = (timestamp: string) => {
 
 const AiImagesView = () => {
   const [status, setStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error', message?: string, progress?: number }>({ type: 'idle' });
-  const [logs, setLogs] = useState<{ time: string; message: string; type: 'info' | 'success' | 'error' }[]>([]);
+  const [logs, setLogs] = useState<{ time: string; message: string; type: 'info' | 'success' | 'warning' | 'error' }[]>([]);
   const [logsOpen, setLogsOpen] = useState(false);
   const [activeSource, setActiveSource] = useState<'gemini' | 'chatgpt' | null>(null);
+  const [selectedSource, setSelectedSource] = useState<'gemini' | 'chatgpt'>('gemini');
   const [maxImages, setMaxImages] = useState('');
+  const [task, setTask] = useState<{
+    source: 'gemini' | 'chatgpt';
+    limit?: number;
+    found?: number;
+    downloaded?: number;
+    total?: number;
+    state: 'idle' | 'extracting' | 'downloading' | 'complete' | 'error';
+  }>({ source: 'gemini', state: 'idle' });
 
-  const addLog = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+  const sourceConfig = {
+    gemini: {
+      label: 'Gemini',
+      pageLabel: 'Gemini MyStuff',
+      pageUrl: 'https://gemini.google.com/mystuff',
+      action: 'EXTRACT_GEMINI_IMAGES',
+      host: 'gemini.google.com',
+    },
+    chatgpt: {
+      label: 'ChatGPT',
+      pageLabel: 'ChatGPT Images',
+      pageUrl: 'https://chatgpt.com/images',
+      action: 'EXTRACT_CHATGPT_IMAGES',
+      host: 'chatgpt.com',
+    },
+  };
+
+  const addLog = (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     const time = new Date().toLocaleTimeString([], { hour12: false });
     setLogs(current => [...current.slice(-99), { time, message, type }]);
   };
 
   // Listen for progress updates from background script
   useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+
     const listener = (message: any) => {
       console.log('[Sidepanel] Received message:', message);
       if (!activeSource) return;
 
       if (message.action === 'DOWNLOAD_PROGRESS') {
+        const progressText = typeof message.message === 'string' ? message.message : '';
+        const downloadMatch = progressText.match(/Downloading images: (\d+)\/(\d+)/);
         setStatus({
           type: 'loading',
           message: message.message,
           progress: message.progress
         });
+        if (downloadMatch) {
+          setTask(current => ({
+            ...current,
+            state: 'downloading',
+            downloaded: Number(downloadMatch[1]),
+            total: Number(downloadMatch[2]),
+          }));
+        }
         addLog(`${message.progress ?? '-'}% - ${message.message}`);
       } else if (message.action === 'DOWNLOAD_COMPLETE') {
         setStatus({ type: 'success', message: message.message });
+        setTask(current => ({ ...current, state: 'complete' }));
         addLog(message.message, 'success');
         setActiveSource(null);
       } else if (message.action === 'DOWNLOAD_ERROR') {
         setStatus({ type: 'error', message: message.message });
+        setTask(current => ({ ...current, state: 'error' }));
         addLog(message.message, 'error');
         setActiveSource(null);
       }
@@ -111,11 +151,14 @@ const AiImagesView = () => {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, [activeSource]);
 
-  const handleDownload = async (source: 'gemini' | 'chatgpt') => {
-    const sourceName = source === 'gemini' ? 'Gemini' : 'ChatGPT';
+  const handleDownload = async () => {
+    const source = selectedSource;
+    const config = sourceConfig[source];
+    const sourceName = config.label;
     setLogs([]);
     setLogsOpen(true);
     setActiveSource(source);
+    setTask({ source, state: 'extracting' });
     addLog(`Starting ${sourceName} image download`);
     setStatus({ type: 'loading', message: 'Extracting images...' });
     try {
@@ -124,6 +167,7 @@ const AiImagesView = () => {
         throw new Error('Max images must be a positive number.');
       }
 
+      setTask({ source, limit: imageLimit ? Math.floor(imageLimit) : undefined, state: 'extracting' });
       addLog(imageLimit ? `Max images: ${Math.floor(imageLimit)}` : 'Max images: unlimited');
       addLog('Reading active browser tab');
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -133,39 +177,49 @@ const AiImagesView = () => {
       if (!tab.url) throw new Error("Tab URL is undefined");
       addLog(`Active page: ${tab.url}`);
       
-      if (source === 'gemini' && !tab.url.includes('gemini.google.com')) {
-        throw new Error(`Please navigate to gemini.google.com first. Current URL: ${tab.url}`);
+      if (!tab.url.includes(config.host)) {
+        throw new Error(`Please navigate to ${config.pageUrl} first. Current URL: ${tab.url}`);
       }
 
-      if (source === 'chatgpt' && !tab.url.includes('chatgpt.com')) {
-        throw new Error(`Please navigate to chatgpt.com/images first. Current URL: ${tab.url}`);
-      }
-
-      const action = source === 'gemini' ? 'EXTRACT_GEMINI_IMAGES' : 'EXTRACT_CHATGPT_IMAGES';
       addLog(`Requesting original image URLs from ${sourceName}`);
-      console.log(`[AI Images] Sending ${action} to tab:`, tab.id);
+      console.log(`[AI Images] Sending ${config.action} to tab:`, tab.id);
       const response = await chrome.tabs.sendMessage(tab.id, {
-        action,
+        action: config.action,
         maxImages: imageLimit ? Math.floor(imageLimit) : undefined
       });
       console.log('[AI Images] Response:', response);
       
       if (response && response.success) {
         addLog(`Found ${response.count} image URLs. Starting ZIP download.`);
+        setTask(current => ({ ...current, found: response.count, total: response.count, state: 'downloading' }));
         setStatus({ type: 'loading', message: `Found ${response.count} images. Starting download...` });
       } else {
         const errorDetail = response ? JSON.stringify(response) : 'No response from content script';
         addLog(`Image extraction failed: ${response?.error || errorDetail}`, 'error');
         setActiveSource(null);
+        setTask(current => ({ ...current, state: 'error' }));
         setStatus({ type: 'error', message: `Error: ${response?.error || errorDetail}` });
       }
     } catch (err: any) {
       console.error('[AI Images] Error:', err);
       addLog(`Error: ${err.message || String(err)}`, 'error');
       setActiveSource(null);
+      setTask(current => ({ ...current, state: 'error' }));
       setStatus({ type: 'error', message: `Error: ${err.message || String(err)}` });
     }
   };
+
+  const selectedConfig = sourceConfig[selectedSource];
+  const taskSourceLabel = sourceConfig[task.source].label;
+  const taskLimit = task.limit ? `${task.limit}` : 'All';
+  const taskProgress = task.downloaded !== undefined && task.total ? `${task.downloaded} of ${task.total}` : task.found ? `${task.found} found` : 'Waiting';
+  const taskStateLabel = {
+    idle: 'Idle',
+    extracting: 'Extracting',
+    downloading: 'Downloading',
+    complete: 'Complete',
+    error: 'Error',
+  }[task.state];
 
   return (
     <div className="p-4 space-y-4">
@@ -175,35 +229,41 @@ const AiImagesView = () => {
       </h2>
 
       <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Navigate to your <a href="https://gemini.google.com/mystuff" target="_blank" rel="noreferrer" className="underline text-primary">Gemini/MyStuff</a> page and click below to download all full-resolution images.
-        </p>
-        
-        <button 
-          onClick={() => handleDownload('gemini')}
-          disabled={status.type === 'loading'}
-          className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-        >
-          {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          {status.type === 'loading' ? 'Processing...' : 'Download Gemini Images'}
-        </button>
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">Source</div>
+          <div className="grid grid-cols-2 gap-1 rounded-md border bg-muted/30 p-1">
+            {(['gemini', 'chatgpt'] as const).map(source => (
+              <button
+                key={source}
+                type="button"
+                onClick={() => {
+                  setSelectedSource(source);
+                  setTask(current => current.state === 'idle' ? { source, state: 'idle' } : current);
+                }}
+                disabled={status.type === 'loading'}
+                className={cn(
+                  "px-3 py-2 text-xs font-medium rounded transition-colors",
+                  selectedSource === source
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {sourceConfig[source].label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        <p className="text-sm text-muted-foreground">
-          Navigate to your <a href="https://chatgpt.com/images" target="_blank" rel="noreferrer" className="underline text-primary">ChatGPT Images</a> page and click below to download original images from the library.
-        </p>
-        
-        <button 
-          onClick={() => handleDownload('chatgpt')}
-          disabled={status.type === 'loading'}
-          className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-        >
-          {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          {status.type === 'loading' ? 'Processing...' : 'Download ChatGPT Images'}
-        </button>
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">Page</span>
+          <a href={selectedConfig.pageUrl} target="_blank" rel="noreferrer" className="font-medium text-primary underline">
+            {selectedConfig.pageLabel}
+          </a>
+        </div>
 
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground" htmlFor="ai-max-images">
-            Max images
+            Limit
           </label>
           <input
             id="ai-max-images"
@@ -213,11 +273,20 @@ const AiImagesView = () => {
             inputMode="numeric"
             value={maxImages}
             onChange={(event) => setMaxImages(event.target.value)}
-            placeholder="Unlimited"
+            placeholder="All"
             disabled={status.type === 'loading'}
             className="w-full px-3 py-2 border rounded text-sm bg-background disabled:opacity-50"
           />
         </div>
+
+        <button
+          onClick={handleDownload}
+          disabled={status.type === 'loading'}
+          className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+        >
+          {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {status.type === 'loading' ? 'Processing...' : `Download ${selectedConfig.label} Images`}
+        </button>
 
         {/* Progress bar */}
         {status.type === 'loading' && status.progress !== undefined && (
@@ -226,6 +295,27 @@ const AiImagesView = () => {
               className="h-full bg-primary transition-all duration-300"
               style={{ width: `${status.progress}%` }}
             />
+          </div>
+        )}
+
+        {task.state !== 'idle' && (
+          <div className="grid grid-cols-2 gap-2 rounded-md border bg-background p-3 text-xs">
+            <div>
+              <div className="text-muted-foreground">Source</div>
+              <div className="font-medium">{taskSourceLabel}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Limit</div>
+              <div className="font-medium">{taskLimit}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Status</div>
+              <div className="font-medium">{taskStateLabel}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Progress</div>
+              <div className="font-medium">{taskProgress}</div>
+            </div>
           </div>
         )}
 
@@ -252,7 +342,7 @@ const AiImagesView = () => {
               {logsOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
               Logs
             </span>
-            <span className="text-muted-foreground">{logs.length}</span>
+            <span className="text-muted-foreground">{logs.length} entries</span>
           </button>
 
           {logsOpen && (
@@ -265,6 +355,7 @@ const AiImagesView = () => {
                   className={cn(
                     "flex gap-2 leading-relaxed",
                     log.type === 'success' && "text-green-300",
+                    log.type === 'warning' && "text-yellow-300",
                     log.type === 'error' && "text-red-300",
                     log.type === 'info' && "text-gray-200",
                   )}
@@ -295,6 +386,8 @@ const PageImagesView = () => {
 
   // Listen for progress updates from background script
   useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+
     const listener = (message: any) => {
       console.log('[PageImages] Received message:', message);
       if (message.action === 'DOWNLOAD_PROGRESS') {
@@ -1308,8 +1401,32 @@ const YoutubeView = () => (
   </div>
 )
 
+const getInitialTabFromUrl = (url?: string) => {
+  if (!url) return 'images';
+  try {
+    const hostname = new URL(url).hostname;
+    if (hostname.includes('weibo.com')) return 'weibo';
+    if (hostname.includes('douban.com')) return 'douban';
+    if (hostname.includes('gemini.google.com') || hostname.includes('chatgpt.com')) return 'gemini';
+  } catch {
+    return 'images';
+  }
+  return 'images';
+}
+
 function App() {
-  const [activeTab, setActiveTab] = useState('weibo')
+  const [activeTab, setActiveTab] = useState('images')
+
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
+      setActiveTab('images');
+      return;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true })
+      .then(([tab]) => setActiveTab(getInitialTabFromUrl(tab?.url)))
+      .catch(() => setActiveTab('images'));
+  }, []);
 
   return (
     <div className="w-full h-screen bg-background text-foreground flex flex-col font-sans">
