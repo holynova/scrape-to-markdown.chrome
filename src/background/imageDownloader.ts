@@ -8,18 +8,23 @@ interface FetchResult {
 
 type ProgressCallback = (message: string, progress?: number) => void;
 
+interface DownloadOptions {
+  source?: string;
+}
+
 export class ImageDownloader {
   private readonly MAX_CONCURRENT = 4;
 
   constructor() {}
 
-  public async downloadAsZip(urls: string[], onProgress?: ProgressCallback): Promise<void> {
+  public async downloadAsZip(urls: string[], onProgress?: ProgressCallback, options: DownloadOptions = {}): Promise<void> {
+    const source = options.source || 'images';
     console.log(`[ImageDownloader] Starting batch download of ${urls.length} images...`);
     
     onProgress?.('Starting download...', 0);
     
     const zip = new JSZip();
-    const folder = zip.folder('gemini_images');
+    const folder = zip.folder(`${source}_images`);
     
     if (!folder) {
       console.error('Failed to create folder in zip');
@@ -35,7 +40,7 @@ export class ImageDownloader {
     let successCount = 0;
     results.forEach((result, index) => {
       if (result.success && result.blob) {
-        const filename = `${String(index + 1).padStart(3, '0')}.jpg`;
+        const filename = `${String(index + 1).padStart(3, '0')}.${this.getImageExtension(result.blob.type, urls[index])}`;
         folder.file(filename, result.blob);
         successCount++;
       } else {
@@ -56,17 +61,16 @@ export class ImageDownloader {
     
     const zipBlob = await zip.generateAsync({ 
       type: 'blob',
-      compression: 'DEFLATE',
-      compressionOptions: { level: 6 }
+      compression: 'STORE'
     });
 
     // Create download URL and trigger download
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `gemini_images_${timestamp}.zip`;
+    const filename = `${source}_images_${timestamp}.zip`;
     
     onProgress?.('Preparing download...', 98);
     
-    // Convert blob to data URL for download
+    // MV3 service workers do not reliably expose URL.createObjectURL, so use a data URL here.
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -130,6 +134,33 @@ export class ImageDownloader {
     
     await Promise.all(workers);
     return results;
+  }
+
+  private getImageExtension(contentType: string, url: string): string {
+    const typeMap: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/avif': 'avif',
+    };
+
+    if (contentType && typeMap[contentType.toLowerCase()]) {
+      return typeMap[contentType.toLowerCase()];
+    }
+
+    try {
+      const pathname = new URL(url).pathname;
+      const match = pathname.match(/\.([a-z0-9]+)$/i);
+      if (match && ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(match[1].toLowerCase())) {
+        return match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
+      }
+    } catch {
+      // Fall through to the default below.
+    }
+
+    return 'jpg';
   }
 }
 

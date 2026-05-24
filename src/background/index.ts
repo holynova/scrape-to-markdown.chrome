@@ -39,10 +39,11 @@ function sendError(message: string) {
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action === 'DOWNLOAD_IMAGES') {
     if (request.urls && Array.isArray(request.urls)) {
-      console.log(`Received batch of ${request.urls.length} images.`);
+      const source = typeof request.source === 'string' ? request.source : 'images';
+      console.log(`Received batch of ${request.urls.length} ${source} images.`);
       
       // Start async download process
-      imageDownloader.downloadAsZip(request.urls, sendProgress)
+      imageDownloader.downloadAsZip(request.urls, sendProgress, { source })
         .then(() => {
           console.log('Batch download process completed');
           sendComplete(`Download complete! ${request.urls.length} images saved to ZIP.`);

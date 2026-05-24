@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2, Image, Book } from 'lucide-react'
+import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2, Image, Book, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { WeiboPost, DoubanItem } from '@/types'
 
@@ -54,57 +54,115 @@ const TabTrigger = ({
   )
 }
 
+const formatBuildTimestamp = (timestamp: string) => {
+  const date = new Date(timestamp);
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZoneName: 'short',
+  });
+
+  return formatter.format(date);
+}
+
 // --- Feature Views ---
 
-const GeminiView = () => {
+const AiImagesView = () => {
   const [status, setStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error', message?: string, progress?: number }>({ type: 'idle' });
+  const [logs, setLogs] = useState<{ time: string; message: string; type: 'info' | 'success' | 'error' }[]>([]);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [activeSource, setActiveSource] = useState<'gemini' | 'chatgpt' | null>(null);
+  const [maxImages, setMaxImages] = useState('');
+
+  const addLog = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    const time = new Date().toLocaleTimeString([], { hour12: false });
+    setLogs(current => [...current.slice(-99), { time, message, type }]);
+  };
 
   // Listen for progress updates from background script
   useEffect(() => {
     const listener = (message: any) => {
       console.log('[Sidepanel] Received message:', message);
+      if (!activeSource) return;
+
       if (message.action === 'DOWNLOAD_PROGRESS') {
         setStatus({
           type: 'loading',
           message: message.message,
           progress: message.progress
         });
+        addLog(`${message.progress ?? '-'}% - ${message.message}`);
       } else if (message.action === 'DOWNLOAD_COMPLETE') {
         setStatus({ type: 'success', message: message.message });
+        addLog(message.message, 'success');
+        setActiveSource(null);
       } else if (message.action === 'DOWNLOAD_ERROR') {
         setStatus({ type: 'error', message: message.message });
+        addLog(message.message, 'error');
+        setActiveSource(null);
       }
     };
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
-  }, []);
+  }, [activeSource]);
 
-  const handleDownload = async () => {
+  const handleDownload = async (source: 'gemini' | 'chatgpt') => {
+    const sourceName = source === 'gemini' ? 'Gemini' : 'ChatGPT';
+    setLogs([]);
+    setLogsOpen(true);
+    setActiveSource(source);
+    addLog(`Starting ${sourceName} image download`);
     setStatus({ type: 'loading', message: 'Extracting images...' });
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      console.log('[Gemini] Active tab:', tab);
+      const imageLimit = maxImages.trim() ? Number(maxImages) : undefined;
+      if (imageLimit !== undefined && (!Number.isFinite(imageLimit) || imageLimit <= 0)) {
+        throw new Error('Max images must be a positive number.');
+      }
 
+      addLog(imageLimit ? `Max images: ${Math.floor(imageLimit)}` : 'Max images: unlimited');
+      addLog('Reading active browser tab');
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      console.log('[AI Images] Active tab:', tab);
+      
       if (!tab.id) throw new Error("No active tab found");
       if (!tab.url) throw new Error("Tab URL is undefined");
-
-      // Check if we're on the right page
-      if (!tab.url.includes('gemini.google.com')) {
+      addLog(`Active page: ${tab.url}`);
+      
+      if (source === 'gemini' && !tab.url.includes('gemini.google.com')) {
         throw new Error(`Please navigate to gemini.google.com first. Current URL: ${tab.url}`);
       }
 
-      console.log('[Gemini] Sending EXTRACT_GEMINI_IMAGES to tab:', tab.id);
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'EXTRACT_GEMINI_IMAGES' });
-      console.log('[Gemini] Response:', response);
+      if (source === 'chatgpt' && !tab.url.includes('chatgpt.com')) {
+        throw new Error(`Please navigate to chatgpt.com/images first. Current URL: ${tab.url}`);
+      }
 
+      const action = source === 'gemini' ? 'EXTRACT_GEMINI_IMAGES' : 'EXTRACT_CHATGPT_IMAGES';
+      addLog(`Requesting original image URLs from ${sourceName}`);
+      console.log(`[AI Images] Sending ${action} to tab:`, tab.id);
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        action,
+        maxImages: imageLimit ? Math.floor(imageLimit) : undefined
+      });
+      console.log('[AI Images] Response:', response);
+      
       if (response && response.success) {
+        addLog(`Found ${response.count} image URLs. Starting ZIP download.`);
         setStatus({ type: 'loading', message: `Found ${response.count} images. Starting download...` });
       } else {
         const errorDetail = response ? JSON.stringify(response) : 'No response from content script';
+        addLog(`Image extraction failed: ${response?.error || errorDetail}`, 'error');
+        setActiveSource(null);
         setStatus({ type: 'error', message: `Error: ${response?.error || errorDetail}` });
       }
     } catch (err: any) {
-      console.error('[Gemini] Error:', err);
+      console.error('[AI Images] Error:', err);
+      addLog(`Error: ${err.message || String(err)}`, 'error');
+      setActiveSource(null);
       setStatus({ type: 'error', message: `Error: ${err.message || String(err)}` });
     }
   };
@@ -113,22 +171,53 @@ const GeminiView = () => {
     <div className="p-4 space-y-4">
       <h2 className="text-lg font-semibold flex items-center gap-2">
         <Image className="w-5 h-5 text-primary" />
-        Gemini Saver
+        AI Image Saver
       </h2>
 
       <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-4">
         <p className="text-sm text-muted-foreground">
           Navigate to your <a href="https://gemini.google.com/mystuff" target="_blank" rel="noreferrer" className="underline text-primary">Gemini/MyStuff</a> page and click below to download all full-resolution images.
         </p>
-
-        <button
-          onClick={handleDownload}
+        
+        <button 
+          onClick={() => handleDownload('gemini')}
           disabled={status.type === 'loading'}
           className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          {status.type === 'loading' ? 'Processing...' : 'Download All Images'}
+          {status.type === 'loading' ? 'Processing...' : 'Download Gemini Images'}
         </button>
+
+        <p className="text-sm text-muted-foreground">
+          Navigate to your <a href="https://chatgpt.com/images" target="_blank" rel="noreferrer" className="underline text-primary">ChatGPT Images</a> page and click below to download original images from the library.
+        </p>
+        
+        <button 
+          onClick={() => handleDownload('chatgpt')}
+          disabled={status.type === 'loading'}
+          className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+        >
+          {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {status.type === 'loading' ? 'Processing...' : 'Download ChatGPT Images'}
+        </button>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground" htmlFor="ai-max-images">
+            Max images
+          </label>
+          <input
+            id="ai-max-images"
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            value={maxImages}
+            onChange={(event) => setMaxImages(event.target.value)}
+            placeholder="Unlimited"
+            disabled={status.type === 'loading'}
+            className="w-full px-3 py-2 border rounded text-sm bg-background disabled:opacity-50"
+          />
+        </div>
 
         {/* Progress bar */}
         {status.type === 'loading' && status.progress !== undefined && (
@@ -152,6 +241,41 @@ const GeminiView = () => {
             {status.message}
           </div>
         )}
+
+        <div className="border rounded-md overflow-hidden bg-background">
+          <button
+            type="button"
+            onClick={() => setLogsOpen(open => !open)}
+            className="w-full px-3 py-2 text-xs font-medium flex items-center justify-between hover:bg-muted/60 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              {logsOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              Logs
+            </span>
+            <span className="text-muted-foreground">{logs.length}</span>
+          </button>
+
+          {logsOpen && (
+            <div className="max-h-48 overflow-auto border-t bg-[#111827] text-xs font-mono p-2 space-y-1">
+              {logs.length === 0 ? (
+                <div className="text-gray-400">No logs yet.</div>
+              ) : logs.map((log, index) => (
+                <div
+                  key={`${log.time}-${index}`}
+                  className={cn(
+                    "flex gap-2 leading-relaxed",
+                    log.type === 'success' && "text-green-300",
+                    log.type === 'error' && "text-red-300",
+                    log.type === 'info' && "text-gray-200",
+                  )}
+                >
+                  <span className="text-gray-500 shrink-0">[{log.time}]</span>
+                  <span className="break-words">{log.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -1207,7 +1331,7 @@ function App() {
           Markdown
         </TabTrigger>
         <TabTrigger id="gemini" active={activeTab} onClick={setActiveTab} icon={Image}>
-          Gemini
+          AI Images
         </TabTrigger>
         <TabTrigger id="images" active={activeTab} onClick={setActiveTab} icon={Download}>
           Images
@@ -1219,13 +1343,16 @@ function App() {
         {activeTab === 'douban' && <DoubanView />}
         {activeTab === 'markdown' && <MarkdownView />}
         {activeTab === 'youtube' && <YoutubeView />}
-        {activeTab === 'gemini' && <GeminiView />}
+        {activeTab === 'gemini' && <AiImagesView />}
         {activeTab === 'images' && <PageImagesView />}
       </main>
 
       {/* Build version footer */}
-      <footer className="px-4 py-1 border-t bg-muted/20 text-xs text-muted-foreground text-center shrink-0">
-        Build: {new Date(__BUILD_TIMESTAMP__).toLocaleString()}
+      <footer
+        className="px-4 py-1 border-t bg-muted/20 text-xs text-muted-foreground text-center shrink-0"
+        title={`Build timestamp: ${__BUILD_TIMESTAMP__}`}
+      >
+        构建时间: {formatBuildTimestamp(__BUILD_TIMESTAMP__)}
       </footer>
     </div>
   )

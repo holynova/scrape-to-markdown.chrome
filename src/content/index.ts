@@ -8,6 +8,100 @@ console.log('Scrape-to-Markdown Content Script Loaded');
 let weiboScraper: WeiboScraper | null = null;
 let doubanScraper: DoubanScraper | null = null;
 
+interface ChatGPTImageItem {
+  id?: string;
+  url?: string;
+  download_url?: string;
+  downloadable_url?: string;
+  encodings?: {
+    source?: { path?: string };
+    thumbnail?: { path?: string };
+  };
+  generation?: ChatGPTImageItem;
+}
+
+interface ChatGPTImageResponse {
+  items?: ChatGPTImageItem[];
+  cursor?: string;
+}
+
+async function getChatGPTBearerToken(): Promise<string> {
+  const response = await fetch('https://chatgpt.com/api/auth/session', {
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get ChatGPT session: HTTP ${response.status}`);
+  }
+
+  const session = await response.json();
+  if (!session.accessToken) {
+    throw new Error('No ChatGPT access token found. Please log in to ChatGPT first.');
+  }
+
+  return session.accessToken;
+}
+
+function getChatGPTOriginalImageUrl(item: ChatGPTImageItem): string | null {
+  const candidates = [
+    item.encodings?.source?.path,
+    item.generation?.encodings?.source?.path,
+    item.url,
+    item.generation?.url,
+    item.download_url,
+    item.downloadable_url,
+  ].filter((url): url is string => Boolean(url && url.startsWith('http')));
+
+  const original = candidates.find(url => !/(_thumb|thumbnail)/i.test(new URL(url).pathname));
+  return original || candidates[0] || null;
+}
+
+async function fetchChatGPTImageUrls(): Promise<string[]> {
+  const token = await getChatGPTBearerToken();
+  const urls: string[] = [];
+  const seenItems = new Set<string>();
+  let cursor: string | undefined;
+
+  do {
+    const apiUrl = new URL('https://chatgpt.com/backend-api/my/recent/image_gen');
+    apiUrl.searchParams.set('limit', '100');
+    if (cursor) {
+      apiUrl.searchParams.set('after', cursor);
+    }
+
+    const response = await fetch(apiUrl.toString(), {
+      credentials: 'include',
+      headers: {
+        Accept: '*/*',
+        Authorization: `Bearer ${token}`,
+      },
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ChatGPT images: HTTP ${response.status}`);
+    }
+
+    const data = await response.json() as ChatGPTImageResponse;
+    const items = data.items || [];
+
+    for (const item of items) {
+      const itemKey = item.id || getChatGPTOriginalImageUrl(item);
+      if (!itemKey || seenItems.has(itemKey)) continue;
+
+      seenItems.add(itemKey);
+      const imageUrl = getChatGPTOriginalImageUrl(item);
+      if (imageUrl) {
+        urls.push(imageUrl);
+      }
+    }
+
+    cursor = data.cursor;
+  } while (cursor);
+
+  return Array.from(new Set(urls));
+}
+
 // Handle auto-resume for Douban scraping (since pagination reloads page)
 DoubanScraper.checkAndResume((data) => {
    chrome.runtime.sendMessage({ action: 'DOUBAN_DATA', data }).catch(() => {});
@@ -21,6 +115,13 @@ DoubanScraper.checkAndResume((data) => {
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   console.log('[ContentScript] Received message:', request.action, request);
+  const limitImageUrls = (urls: string[]) => {
+    const maxImages = typeof request.maxImages === 'number' && Number.isFinite(request.maxImages) && request.maxImages > 0
+      ? Math.floor(request.maxImages)
+      : undefined;
+
+    return maxImages ? urls.slice(0, maxImages) : urls;
+  };
   
   if (request.action === 'SCRAPE_MARKDOWN') {
     (async () => {
@@ -131,7 +232,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       // .filter(src => src.includes('googleusercontent.com') && !src.includes('favicon'));
     console.log("imageUrls",imageUrls);
     const uniqueUrls = new Set(imageUrls);
-    const downloadList = Array.from(uniqueUrls).map(url => {
+    const downloadList = limitImageUrls(Array.from(uniqueUrls).map(url => {
       // Transform to full size: Gemini uses format like =w320-h320-n-v1-rj
       // We replace everything after the last '=' with 's0' for full resolution
       // Match pattern: =<anything that's not = until end of string>
@@ -145,19 +246,45 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         fullUrl = url + '=s0';
       }
       return fullUrl;
-    });
+    }));
 
     console.log(`Found ${downloadList.length} images.`);
 
     if (downloadList.length > 0) {
       chrome.runtime.sendMessage({ 
         action: 'DOWNLOAD_IMAGES', 
-        urls: downloadList 
+        urls: downloadList,
+        source: 'gemini'
       });
       sendResponse({ success: true, count: downloadList.length });
     } else {
       sendResponse({ success: false, error: 'No images found' });
     }
+    return true;
+  }
+
+  if (request.action === 'EXTRACT_CHATGPT_IMAGES') {
+    console.log('Extracting ChatGPT images...');
+    (async () => {
+      try {
+        const downloadList = limitImageUrls(await fetchChatGPTImageUrls());
+        console.log(`Found ${downloadList.length} ChatGPT images.`);
+
+        if (downloadList.length > 0) {
+          chrome.runtime.sendMessage({
+            action: 'DOWNLOAD_IMAGES',
+            urls: downloadList,
+            source: 'chatgpt'
+          });
+          sendResponse({ success: true, count: downloadList.length });
+        } else {
+          sendResponse({ success: false, error: 'No ChatGPT images found' });
+        }
+      } catch (error) {
+        console.error('ChatGPT image extraction failed:', error);
+        sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    })();
     return true;
   }
 
@@ -193,7 +320,8 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     if (urls.length > 0) {
       chrome.runtime.sendMessage({ 
         action: 'DOWNLOAD_IMAGES', 
-        urls: urls 
+        urls: urls,
+        source: 'page'
       });
       sendResponse({ success: true, count: urls.length });
     } else {
