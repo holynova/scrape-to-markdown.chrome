@@ -1,3 +1,13 @@
+## 1.1.6 - 2026-05-25
+
+### Fixes
+- Fix Douban stop behavior so sequential scraping does not continue after manual stop.
+- Enforce Douban limit during current and sequential scraping.
+- Make Douban navigation resume more reliable by saving scrape state before page navigation.
+
+### Design
+- Replace the extension icon with a green hand-grabbing-browser mark.
+
 ## 1.1.5 - 2026-05-24
 
 ### Features
