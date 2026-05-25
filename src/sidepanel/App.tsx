@@ -873,6 +873,7 @@ const DoubanView = () => {
 
   const [logs, setLogs] = useState<{ time: string, msg: string }[]>([]);
   const logsEndRef = React.useRef<HTMLDivElement>(null);
+  const stopRequestedRef = React.useRef(false);
 
   useEffect(() => {
     if (logsEndRef.current) {
@@ -941,6 +942,8 @@ const DoubanView = () => {
   }, [isSequential, currentTaskIndex, tasks, username, limit]);
 
   const handleTaskComplete = async () => {
+    if (stopRequestedRef.current) return;
+
     const { isSequential, currentTaskIndex, tasks, username, limit } = stateRef.current;
 
     if (isSequential && currentTaskIndex >= 0 && currentTaskIndex < tasks.length) {
@@ -987,7 +990,7 @@ const DoubanView = () => {
       doubanSequential: false,
       doubanCurrentTaskIndex: -1
     });
-    chrome.storage.local.remove(['doubanStartTime', 'doubanTasks']);
+    chrome.storage.local.remove(['doubanStartTime', 'doubanTasks', 'doubanScrapedCount']);
   };
 
   const startSpecificTask = async (targetUrl: string, limitVal: number) => {
@@ -995,14 +998,14 @@ const DoubanView = () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab.id) return;
 
-      // Navigate to the target URL
-      await chrome.tabs.update(tab.id, { url: targetUrl });
+      await chrome.storage.local.set({
+        isScrapingDouban: true,
+        doubanLimit: Math.max(0, Math.floor(limitVal || 0)),
+        doubanScrapedCount: 0
+      });
 
-      // Wait for page to load then inject start command
-      // Since it's a new navigation, the content script will re-initialize
-      // We set the storage state, so `DoubanScraper.checkAndResume` will automatically pick it up!
-      // We just need to ensure `isScrapingDouban` is true in storage.
-      chrome.storage.local.set({ isScrapingDouban: true, doubanLimit: limitVal });
+      // The content script reads storage on page load, so write state before navigation.
+      await chrome.tabs.update(tab.id, { url: targetUrl });
 
     } catch (e: any) {
       console.error('Navigation failed', e);
@@ -1012,6 +1015,7 @@ const DoubanView = () => {
 
   const handleStartCurrent = async () => {
     if (!username) return alert('Please enter a username');
+    stopRequestedRef.current = false;
 
     // Find index of active tab
     const idx = tasks.findIndex(t => t.id === activeSubTab);
@@ -1042,6 +1046,7 @@ const DoubanView = () => {
 
   const handleStartAll = async () => {
     if (!username) return alert('Please enter a username');
+    stopRequestedRef.current = false;
 
     const updatedTasks = tasks.map((t, i) => ({ ...t, status: i === 0 ? 'running' as const : 'idle' as const }));
     setTasks(updatedTasks);
@@ -1067,6 +1072,14 @@ const DoubanView = () => {
   };
 
   const handleStop = async () => {
+    stopRequestedRef.current = true;
+    await chrome.storage.local.set({
+      isScrapingDouban: false,
+      doubanSequential: false,
+      doubanCurrentTaskIndex: -1
+    });
+    await chrome.storage.local.remove(['doubanScrapedCount']);
+
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) {

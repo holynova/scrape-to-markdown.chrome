@@ -3,6 +3,8 @@ import type { DoubanItem } from '../types';
 export class DoubanScraper {
   private isRunning = false;
   private intervalId: any = null;
+  private limit = 0;
+  private scrapedCount = 0;
 
   private onData: (data: DoubanItem[]) => void;
   private onLog: (msg: string) => void;
@@ -23,27 +25,35 @@ export class DoubanScraper {
       onLog: (msg: string) => void,
       onFinish: () => void
   ) {
-      const data = await chrome.storage.local.get(['isScrapingDouban', 'doubanLimit']);
+      const data = await chrome.storage.local.get(['isScrapingDouban', 'doubanLimit', 'doubanScrapedCount']);
       if (data.isScrapingDouban) {
          console.log('[DoubanScraper] Resuming scrape on page load...');
          const scraper = new DoubanScraper(onData, onLog, onFinish);
-         scraper.start((data.doubanLimit as number) || 0, true);
+         scraper.start((data.doubanLimit as number) || 0, true, (data.doubanScrapedCount as number) || 0);
          return scraper;
       }
       return null;
   }
 
-  async start(limit: number, isResume = false) {
+  async start(limit: number, isResume = false, scrapedCount = 0) {
     if (this.isRunning) return;
 
     this.isRunning = true;
+    this.limit = Math.max(0, Math.floor(limit || 0));
+    this.scrapedCount = Math.max(0, Math.floor(scrapedCount || 0));
 
     if (!isResume) {
-       await chrome.storage.local.set({ isScrapingDouban: true, doubanLimit: limit });
+       this.scrapedCount = 0;
+       await chrome.storage.local.set({
+         isScrapingDouban: true,
+         doubanLimit: this.limit,
+         doubanScrapedCount: 0
+       });
     }
 
     console.log('[DoubanScraper] Started');
     this.onLog(`[System] Started scraping on: ${window.location.href}`);
+    this.onLog(this.limit > 0 ? `[System] Limit: ${this.limit}` : `[System] Limit: unlimited`);
 
     // Initial delay to simulate human behavior
     setTimeout(() => {
@@ -51,13 +61,16 @@ export class DoubanScraper {
     }, isResume ? 1500 + Math.random() * 1000 : 500);
   }
 
-  async stop() {
+  async stop(isComplete = false) {
     this.isRunning = false;
     if (this.intervalId) clearTimeout(this.intervalId);
     await chrome.storage.local.set({ isScrapingDouban: false });
+    await chrome.storage.local.remove(['doubanScrapedCount']);
     console.log('[DoubanScraper] Stopped.');
-    this.onLog(`[System] Scraper stopped.`);
-    this.onFinish();
+    this.onLog(isComplete ? `[System] Scraper completed.` : `[System] Scraper stopped.`);
+    if (isComplete) {
+      this.onFinish();
+    }
   }
 
   private processPage() {
@@ -66,6 +79,12 @@ export class DoubanScraper {
     this.scrapeCurrentView();
 
     if (!this.isRunning) return;
+
+    if (this.hasReachedLimit()) {
+      this.onLog(`[System] Reached limit (${this.scrapedCount}/${this.limit}).`);
+      this.stop(true);
+      return;
+    }
 
     window.scrollTo({
       top: document.body.scrollHeight,
@@ -85,7 +104,7 @@ export class DoubanScraper {
     } else {
       console.log('[DoubanScraper] Reached bottom or no next page. Stopping.');
       this.onLog(`[System] Reached end of list.`);
-      this.stop();
+      this.stop(true);
     }
   }
 
@@ -112,7 +131,9 @@ export class DoubanScraper {
     const items = document.querySelectorAll('li.subject-item, div.item');
     console.log(`[DoubanScraper] Found ${items.length} items on page.`);
 
-    items.forEach((node) => {
+    for (const node of Array.from(items)) {
+      if (this.hasReachedLimit()) break;
+
       const card = node as HTMLElement;
       
       // Title extraction (movies often use .title a em)
@@ -161,14 +182,20 @@ export class DoubanScraper {
 
       const item: DoubanItem = { id, title, rating, readDate, comment, link, type, status };
       newItems.push(item);
+      this.scrapedCount++;
       this.onLog(`[Extract] ${title} (${item.type})`);
-    });
+    }
 
     if (newItems.length > 0) {
       this.onData(newItems);
+      chrome.storage.local.set({ doubanScrapedCount: this.scrapedCount });
     } else {
       this.onLog(`[Warning] Found 0 items on this page...`);
     }
+  }
+
+  private hasReachedLimit(): boolean {
+    return this.limit > 0 && this.scrapedCount >= this.limit;
   }
 
   private hash(str: string): string {
