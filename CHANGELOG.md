@@ -1,3 +1,9 @@
+## 1.1.7 - 2026-07-19
+
+- Add a ChatGPT conversation exporter with selection, optional images and attachments, plus ZIP downloads.
+- Add English and Chinese UI support with a persistent language switcher.
+- Improve export filtering and use seconds for request pacing controls.
+
 ## 1.1.6 - 2026-05-25
 
 ### Fixes

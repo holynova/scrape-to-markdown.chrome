@@ -2,11 +2,13 @@ import { Readability } from '@mozilla/readability';
 import TurndownService from 'turndown';
 import { WeiboScraper } from './weibo';
 import { DoubanScraper } from './douban';
+import { ChatGPTConversationExporter } from './chatgptExporter';
 
 console.log('Scrape-to-Markdown Content Script Loaded');
 
 let weiboScraper: WeiboScraper | null = null;
 let doubanScraper: DoubanScraper | null = null;
+const chatGPTExporter = new ChatGPTConversationExporter();
 
 interface ChatGPTImageItem {
   id?: string;
@@ -122,6 +124,39 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
     return maxImages ? urls.slice(0, maxImages) : urls;
   };
+
+  if (request.action === 'CHATGPT_EXPORT_SCAN') {
+    (async () => {
+      try {
+        const conversations = await chatGPTExporter.scan(request.options);
+        sendResponse({ success: true, conversations });
+      } catch (error) {
+        sendResponse({ success: false, error: error instanceof Error ? error.message : '扫描失败' });
+      }
+    })();
+    return true;
+  }
+
+  if (request.action === 'CHATGPT_EXPORT_START') {
+    (async () => {
+      try {
+        await chatGPTExporter.export(request.conversations, request.options);
+      } catch (error) {
+        chrome.runtime.sendMessage({
+          action: 'CHATGPT_EXPORT_ERROR',
+          message: error instanceof Error ? error.message : '导出失败',
+        }).catch(() => {});
+      }
+    })();
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (request.action === 'CHATGPT_EXPORT_STOP') {
+    chatGPTExporter.cancel();
+    sendResponse({ success: true });
+    return true;
+  }
   
   if (request.action === 'SCRAPE_MARKDOWN') {
     (async () => {

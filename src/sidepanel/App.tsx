@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2, Image, Book, ChevronDown, ChevronRight } from 'lucide-react'
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { FileText, MessagesSquare, Youtube, Copy, Download, Loader2, AlertCircle, Play, Square, ArrowUpDown, Search, Trash2, Image, Book, ChevronDown, ChevronRight, Archive, CheckSquare, ExternalLink, Languages } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { WeiboPost, DoubanItem } from '@/types'
+import { translate, type Locale } from './i18n'
 
 export interface DoubanTask {
   id: string;
@@ -11,6 +12,10 @@ export interface DoubanTask {
   type: 'book' | 'movie';
   subStatus: 'wish' | 'collect';
 }
+
+type I18n = { locale: Locale; t: (key: string, values?: Record<string, string | number>) => string };
+const I18nContext = createContext<I18n>({ locale: 'en', t: (key) => key });
+const useI18n = () => useContext(I18nContext);
 
 // --- Tabs Components ---
 const Tabs = ({ children }: { children: React.ReactNode }) => {
@@ -73,6 +78,7 @@ const formatBuildTimestamp = (timestamp: string) => {
 // --- Feature Views ---
 
 const AiImagesView = () => {
+  const { t } = useI18n();
   const [status, setStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error', message?: string, progress?: number }>({ type: 'idle' });
   const [logs, setLogs] = useState<{ time: string; message: string; type: 'info' | 'success' | 'warning' | 'error' }[]>([]);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -160,11 +166,11 @@ const AiImagesView = () => {
     setActiveSource(source);
     setTask({ source, state: 'extracting' });
     addLog(`Starting ${sourceName} image download`);
-    setStatus({ type: 'loading', message: 'Extracting images...' });
+    setStatus({ type: 'loading', message: t('Extracting images...') });
     try {
       const imageLimit = maxImages.trim() ? Number(maxImages) : undefined;
       if (imageLimit !== undefined && (!Number.isFinite(imageLimit) || imageLimit <= 0)) {
-        throw new Error('Max images must be a positive number.');
+        throw new Error(t('Max images must be a positive number.'));
       }
 
       setTask({ source, limit: imageLimit ? Math.floor(imageLimit) : undefined, state: 'extracting' });
@@ -173,8 +179,8 @@ const AiImagesView = () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       console.log('[AI Images] Active tab:', tab);
       
-      if (!tab.id) throw new Error("No active tab found");
-      if (!tab.url) throw new Error("Tab URL is undefined");
+      if (!tab.id) throw new Error(t('No active tab found'));
+      if (!tab.url) throw new Error(t('Tab URL is undefined'));
       addLog(`Active page: ${tab.url}`);
       
       if (!tab.url.includes(config.host)) {
@@ -211,26 +217,26 @@ const AiImagesView = () => {
 
   const selectedConfig = sourceConfig[selectedSource];
   const taskSourceLabel = sourceConfig[task.source].label;
-  const taskLimit = task.limit ? `${task.limit}` : 'All';
-  const taskProgress = task.downloaded !== undefined && task.total ? `${task.downloaded} of ${task.total}` : task.found ? `${task.found} found` : 'Waiting';
+  const taskLimit = task.limit ? `${task.limit}` : t('All');
+  const taskProgress = task.downloaded !== undefined && task.total ? t('{{downloaded}} of {{total}}', { downloaded: task.downloaded, total: task.total }) : task.found ? t('{{count}} found', { count: task.found }) : t('Waiting');
   const taskStateLabel = {
-    idle: 'Idle',
-    extracting: 'Extracting',
-    downloading: 'Downloading',
-    complete: 'Complete',
-    error: 'Error',
+    idle: t('Idle'),
+    extracting: t('Extracting'),
+    downloading: t('Downloading'),
+    complete: t('Complete'),
+    error: t('Error'),
   }[task.state];
 
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-lg font-semibold flex items-center gap-2">
         <Image className="w-5 h-5 text-primary" />
-        AI Image Saver
+        {t('AI Image Saver')}
       </h2>
 
       <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-4">
         <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">Source</div>
+          <div className="text-xs font-medium text-muted-foreground">{t('Source')}</div>
           <div className="grid grid-cols-2 gap-1 rounded-md border bg-muted/30 p-1">
             {(['gemini', 'chatgpt'] as const).map(source => (
               <button
@@ -255,7 +261,7 @@ const AiImagesView = () => {
         </div>
 
         <div className="flex items-center justify-between gap-3 text-sm">
-          <span className="text-muted-foreground">Page</span>
+          <span className="text-muted-foreground">{t('Page')}</span>
           <a href={selectedConfig.pageUrl} target="_blank" rel="noreferrer" className="font-medium text-primary underline">
             {selectedConfig.pageLabel}
           </a>
@@ -263,7 +269,7 @@ const AiImagesView = () => {
 
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground" htmlFor="ai-max-images">
-            Limit
+            {t('Limit')}
           </label>
           <input
             id="ai-max-images"
@@ -273,7 +279,7 @@ const AiImagesView = () => {
             inputMode="numeric"
             value={maxImages}
             onChange={(event) => setMaxImages(event.target.value)}
-            placeholder="All"
+            placeholder={t('All')}
             disabled={status.type === 'loading'}
             className="w-full px-3 py-2 border rounded text-sm bg-background disabled:opacity-50"
           />
@@ -285,7 +291,7 @@ const AiImagesView = () => {
           className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          {status.type === 'loading' ? 'Processing...' : `Download ${selectedConfig.label} Images`}
+          {status.type === 'loading' ? t('Processing...') : t('Download {{source}} Images', { source: selectedConfig.label })}
         </button>
 
         {/* Progress bar */}
@@ -301,19 +307,19 @@ const AiImagesView = () => {
         {task.state !== 'idle' && (
           <div className="grid grid-cols-2 gap-2 rounded-md border bg-background p-3 text-xs">
             <div>
-              <div className="text-muted-foreground">Source</div>
+              <div className="text-muted-foreground">{t('Source')}</div>
               <div className="font-medium">{taskSourceLabel}</div>
             </div>
             <div>
-              <div className="text-muted-foreground">Limit</div>
+              <div className="text-muted-foreground">{t('Limit')}</div>
               <div className="font-medium">{taskLimit}</div>
             </div>
             <div>
-              <div className="text-muted-foreground">Status</div>
+              <div className="text-muted-foreground">{t('Status')}</div>
               <div className="font-medium">{taskStateLabel}</div>
             </div>
             <div>
-              <div className="text-muted-foreground">Progress</div>
+              <div className="text-muted-foreground">{t('Progress')}</div>
               <div className="font-medium">{taskProgress}</div>
             </div>
           </div>
@@ -340,15 +346,15 @@ const AiImagesView = () => {
           >
             <span className="flex items-center gap-2">
               {logsOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-              Logs
+              {t('Logs')}
             </span>
-            <span className="text-muted-foreground">{logs.length} entries</span>
+            <span className="text-muted-foreground">{t('{{count}} entries', { count: logs.length })}</span>
           </button>
 
           {logsOpen && (
             <div className="max-h-48 overflow-auto border-t bg-[#111827] text-xs font-mono p-2 space-y-1">
               {logs.length === 0 ? (
-                <div className="text-gray-400">No logs yet.</div>
+                <div className="text-gray-400">{t('No logs yet.')}</div>
               ) : logs.map((log, index) => (
                 <div
                   key={`${log.time}-${index}`}
@@ -372,6 +378,221 @@ const AiImagesView = () => {
   )
 }
 
+type ChatGPTConversation = { id: string; title?: string; create_time?: number };
+type ChatGPTExportMessage = { action?: string; phase?: string; message?: string; progress?: number };
+const errorMessage = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+
+const ChatGPTExportView = () => {
+  const { locale, t } = useI18n();
+  const [status, setStatus] = useState<{ type: 'idle' | 'scanning' | 'ready' | 'exporting' | 'complete' | 'error'; message?: string; progress?: number }>({ type: 'idle' });
+  const [conversations, setConversations] = useState<ChatGPTConversation[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState('');
+  const [options, setOptions] = useState({
+    includeImages: true,
+    concurrency: 1,
+    requestDelaySeconds: 1.2,
+    requestJitterSeconds: 0.6,
+    maxItems: 0,
+    startDate: '',
+    endDate: '',
+  });
+
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+    const listener = (message: ChatGPTExportMessage) => {
+      if (message.action === 'CHATGPT_EXPORT_PROGRESS') {
+        setStatus(current => {
+          if (message.phase === 'scanning' && current.type !== 'scanning') return current;
+          return { type: message.phase === 'scanning' ? 'scanning' : 'exporting', message: message.message, progress: message.progress };
+        });
+      } else if (message.action === 'CHATGPT_EXPORT_COMPLETE') {
+        setStatus({ type: 'complete', message: message.message, progress: 100 });
+      } else if (message.action === 'CHATGPT_EXPORT_ERROR') {
+        setStatus({ type: 'error', message: message.message });
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
+
+  const updateOption = <K extends keyof typeof options>(key: K, value: typeof options[K]) => {
+    setOptions(current => ({ ...current, [key]: value }));
+  };
+
+  const normalizedOptions = () => ({
+    ...options,
+    locale,
+    concurrency: Math.min(5, Math.max(1, Math.floor(Number(options.concurrency) || 1))),
+    requestDelayMs: Math.min(60_000, Math.max(0, Math.round((Number(options.requestDelaySeconds) || 0) * 1_000))),
+    requestJitterMs: Math.min(60_000, Math.max(0, Math.round((Number(options.requestJitterSeconds) || 0) * 1_000))),
+    maxItems: Math.max(0, Math.floor(Number(options.maxItems) || 0)),
+  });
+
+  const activeChatGPTTab = async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url) throw new Error(t('No active browser tab found.'));
+    const hostname = new URL(tab.url).hostname;
+    if (hostname !== 'chatgpt.com' && !hostname.endsWith('.chatgpt.com')) {
+      throw new Error(t('Open chatgpt.com and sign in before scanning.'));
+    }
+    return tab;
+  };
+
+  const handleScan = async () => {
+    const config = normalizedOptions();
+    if (config.startDate && config.endDate && config.startDate > config.endDate) {
+      setStatus({ type: 'error', message: t('Start date must not be after end date.') });
+      return;
+    }
+    setStatus({ type: 'scanning', message: t('Connecting to ChatGPT...'), progress: 0 });
+    setConversations([]);
+    setSelectedIds(new Set());
+    try {
+      const tab = await activeChatGPTTab();
+      const response = await chrome.tabs.sendMessage(tab.id!, { action: 'CHATGPT_EXPORT_SCAN', options: config });
+      if (!response?.success) throw new Error(response?.error || t('Unable to scan conversations.'));
+      const items = response.conversations as ChatGPTConversation[];
+      setConversations(items);
+      setSelectedIds(new Set(items.map(item => item.id)));
+      setStatus({ type: 'ready', message: t('Scan complete: {{count}} conversations. Select what to package.', { count: items.length }), progress: 100 });
+    } catch (error: unknown) {
+      setStatus({ type: 'error', message: errorMessage(error, t('Unable to scan conversations.')) });
+    }
+  };
+
+  const handleExport = async () => {
+    const selected = conversations.filter(item => selectedIds.has(item.id));
+    if (!selected.length) {
+      setStatus({ type: 'error', message: t('Choose at least one conversation.') });
+      return;
+    }
+    setStatus({ type: 'exporting', message: t('Preparing export...'), progress: 0 });
+    try {
+      const tab = await activeChatGPTTab();
+      const response = await chrome.tabs.sendMessage(tab.id!, { action: 'CHATGPT_EXPORT_START', conversations: selected, options: normalizedOptions() });
+      if (!response?.success) throw new Error(response?.error || t('Unable to start export.'));
+    } catch (error: unknown) {
+      setStatus({ type: 'error', message: errorMessage(error, t('Unable to start export.')) });
+    }
+  };
+
+  const stopExport = async () => {
+    try {
+      const tab = await activeChatGPTTab();
+      await chrome.tabs.sendMessage(tab.id!, { action: 'CHATGPT_EXPORT_STOP' });
+      setStatus(current => ({ ...current, message: t('Stopping and packaging completed conversations...') }));
+    } catch (error: unknown) {
+      setStatus({ type: 'error', message: errorMessage(error, t('Unable to stop export.')) });
+    }
+  };
+
+  const shown = conversations.filter(item => (item.title || t('Untitled conversation')).toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()));
+  const isBusy = status.type === 'scanning' || status.type === 'exporting';
+  const selectionText = options.maxItems > 0 && selectedIds.size > options.maxItems
+    ? t('The first {{count}} selected conversations will be exported.', { count: options.maxItems })
+    : t('All selected conversations will be exported.');
+  const toggle = (id: string) => setSelectedIds(current => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+  const selectShown = (selected: boolean) => setSelectedIds(current => {
+    const next = new Set(current);
+    shown.forEach(item => {
+      if (selected) next.add(item.id);
+      else next.delete(item.id);
+    });
+    return next;
+  });
+  const formatDate = (seconds?: number) => Number.isFinite(Number(seconds)) ? new Date(Number(seconds) * 1000).toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US') : t('Unknown date');
+  const selectedShownCount = shown.filter(item => selectedIds.has(item.id)).length;
+
+  return (
+    <div className="h-full overflow-y-auto p-4 space-y-4">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 w-8 h-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0"><Archive className="w-4 h-4" /></div>
+        <div>
+          <h2 className="text-lg font-semibold leading-tight">{t('ChatGPT Conversation Export')}</h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t('Scan conversations from the signed-in account, then download JSON, Markdown, HTML, and optional images or attachments.')}</p>
+          <a href="https://chatgpt.com/" target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">{t('Open ChatGPT')}<ExternalLink className="w-3 h-3" /></a>
+        </div>
+      </div>
+
+      <section className="p-4 border rounded-lg bg-card shadow-sm space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor="chatgpt-export-images" className="text-sm font-medium">{t('Download generated images')}</label>
+          <input id="chatgpt-export-images" type="checkbox" checked={options.includeImages} disabled={isBusy} onChange={event => updateOption('includeImages', event.target.checked)} className="h-4 w-4 accent-primary" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">{t('Concurrent conversations')}
+            <input type="number" min={1} max={5} value={options.concurrency} disabled={isBusy} onChange={event => updateOption('concurrency', Number(event.target.value))} className="w-full px-2.5 py-2 border rounded bg-background text-sm text-foreground disabled:opacity-50" />
+          </label>
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">{t('Maximum exports')}
+            <input type="number" min={0} value={options.maxItems} disabled={isBusy} onChange={event => updateOption('maxItems', Number(event.target.value))} className="w-full px-2.5 py-2 border rounded bg-background text-sm text-foreground disabled:opacity-50" />
+          </label>
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">{t('Request gap (seconds)')}
+            <input type="number" min={0} max={60} step={0.1} value={options.requestDelaySeconds} disabled={isBusy} onChange={event => updateOption('requestDelaySeconds', Number(event.target.value))} className="w-full px-2.5 py-2 border rounded bg-background text-sm text-foreground disabled:opacity-50" />
+          </label>
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">{t('Random delay (seconds)')}
+            <input type="number" min={0} max={60} step={0.1} value={options.requestJitterSeconds} disabled={isBusy} onChange={event => updateOption('requestJitterSeconds', Number(event.target.value))} className="w-full px-2.5 py-2 border rounded bg-background text-sm text-foreground disabled:opacity-50" />
+          </label>
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">{t('Start date')}
+            <input type="date" value={options.startDate} disabled={isBusy} onChange={event => updateOption('startDate', event.target.value)} className="w-full px-2 py-2 border rounded bg-background text-xs text-foreground disabled:opacity-50" />
+          </label>
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">{t('End date')}
+            <input type="date" value={options.endDate} disabled={isBusy} onChange={event => updateOption('endDate', event.target.value)} className="w-full px-2 py-2 border rounded bg-background text-xs text-foreground disabled:opacity-50" />
+          </label>
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">{t('Dates use your local time and include both boundary dates. A slower request pace reduces rate-limit risk.')}</p>
+        <button type="button" onClick={handleScan} disabled={isBusy} className="w-full px-4 py-2 rounded bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+          {status.type === 'scanning' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          {status.type === 'scanning' ? t('Scanning conversations...') : t('Scan ChatGPT conversations')}
+        </button>
+      </section>
+
+      {conversations.length > 0 && (
+        <section className="border rounded-lg bg-card overflow-hidden">
+          <div className="p-3 border-b space-y-3">
+            <div className="text-sm font-medium">{t('Select conversations')} <span className="text-muted-foreground font-normal">{selectedIds.size}/{conversations.length}</span></div>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">{selectionText}</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{t('{{selected}} selected, {{shown}} shown', { selected: selectedIds.size, shown: shown.length })}</span>{filter && <span className="font-medium text-primary">{t('{{selected}} selected in this filter', { selected: selectedShownCount })}</span>}</div>
+            <input type="search" value={filter} onChange={event => setFilter(event.target.value)} disabled={isBusy} placeholder={t('Filter by title')} className="w-full px-3 py-2 border rounded bg-background text-sm disabled:opacity-50" />
+            <div className="flex gap-2 text-xs">
+              <button type="button" onClick={() => selectShown(true)} disabled={isBusy || shown.length === 0} className="px-2.5 py-1.5 rounded border hover:bg-muted disabled:opacity-50">{t('Select shown')}</button>
+              <button type="button" onClick={() => selectShown(false)} disabled={isBusy || shown.length === 0} className="px-2.5 py-1.5 rounded border hover:bg-muted disabled:opacity-50">{t('Clear shown')}</button>
+            </div>
+          </div>
+          <div className="max-h-60 overflow-y-auto divide-y">
+            {shown.length ? shown.map(item => (
+              <label key={item.id} className="flex items-start gap-3 px-3 py-2.5 hover:bg-muted/40 cursor-pointer">
+                <input type="checkbox" checked={selectedIds.has(item.id)} disabled={isBusy} onChange={() => toggle(item.id)} className="mt-0.5 h-4 w-4 accent-primary shrink-0" />
+                <span className="min-w-0 flex-1"><span className="block text-sm truncate">{item.title || t('Untitled conversation')}</span><span className="block mt-0.5 text-xs text-muted-foreground">{formatDate(item.create_time)}</span></span>
+              </label>
+            )) : <p className="p-4 text-center text-sm text-muted-foreground">{t('No matching conversations.')}</p>}
+          </div>
+          <div className="p-3 border-t bg-muted/20">
+            {status.type === 'exporting' ? (
+              <button type="button" onClick={stopExport} className="w-full px-4 py-2 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center justify-center gap-2"><Square className="w-4 h-4" />{t('Stop and package completed conversations')}</button>
+            ) : (
+              <button type="button" onClick={handleExport} disabled={selectedIds.size === 0 || status.type === 'scanning'} className="w-full px-4 py-2 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"><CheckSquare className="w-4 h-4" />{t('Download selected conversations')}</button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {status.type !== 'idle' && (
+        <div className={cn('p-3 rounded-md text-sm', status.type === 'error' ? 'bg-destructive/10 text-destructive' : status.type === 'complete' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300')}>
+          <div className="flex items-start gap-2">{(status.type === 'scanning' || status.type === 'exporting') && <Loader2 className="mt-0.5 w-4 h-4 animate-spin shrink-0" />}{status.type === 'error' && <AlertCircle className="mt-0.5 w-4 h-4 shrink-0" />}<span>{status.message}</span></div>
+          {(status.type === 'scanning' || status.type === 'exporting') && status.progress !== undefined && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-current/20"><div className="h-full rounded-full bg-current transition-all duration-300" style={{ width: `${status.progress}%` }} /></div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface PageImage {
   url: string;
   width: number;
@@ -379,6 +600,7 @@ interface PageImage {
 }
 
 const PageImagesView = () => {
+  const { t } = useI18n();
   const [status, setStatus] = useState<{ type: 'idle' | 'scanning' | 'loading' | 'success' | 'error', message?: string, progress?: number }>({ type: 'idle' });
   const [images, setImages] = useState<PageImage[]>([]);
   const [minWidth, setMinWidth] = useState(100);
@@ -412,19 +634,19 @@ const PageImagesView = () => {
   }, [images, minWidth, minHeight]);
 
   const handleScan = async () => {
-    setStatus({ type: 'scanning', message: 'Scanning page for images...' });
+    setStatus({ type: 'scanning', message: t('Scanning page for images...') });
     setImages([]);
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       console.log('[PageImages] Active tab:', tab);
 
-      if (!tab.id) throw new Error("No active tab found");
-      if (!tab.url) throw new Error("Tab URL is undefined");
+      if (!tab.id) throw new Error(t('No active tab found'));
+      if (!tab.url) throw new Error(t('Tab URL is undefined'));
 
       // Check if it's a restricted page
       if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
-        throw new Error("Cannot scan browser internal pages");
+        throw new Error(t('Cannot scan browser internal pages'));
       }
 
       console.log('[PageImages] Sending EXTRACT_PAGE_IMAGES to:', tab.url);
@@ -433,16 +655,16 @@ const PageImagesView = () => {
 
       if (response && response.success) {
         setImages(response.images);
-        setStatus({ type: 'idle', message: `Found ${response.images.length} images` });
+        setStatus({ type: 'idle', message: t('Found {{count}} images', { count: response.images.length }) });
       } else {
         setStatus({ type: 'error', message: response?.error || 'No response from page' });
       }
     } catch (err: any) {
       console.error('[PageImages] Error:', err);
       // Provide more helpful error message
-      let errorMsg = err.message || 'Failed to scan page';
+      let errorMsg = err.message || t('Failed to scan page');
       if (err.message?.includes('Could not establish connection') || err.message?.includes('Receiving end does not exist')) {
-        errorMsg = 'Content script not loaded. Try refreshing the page.';
+        errorMsg = t('Content script not loaded. Try refreshing the page.');
       }
       setStatus({ type: 'error', message: errorMsg });
     }
@@ -451,22 +673,22 @@ const PageImagesView = () => {
   const handleDownload = async () => {
     if (filteredImages.length === 0) return;
 
-    setStatus({ type: 'loading', message: `Preparing to download ${filteredImages.length} images...` });
+    setStatus({ type: 'loading', message: t('Preparing to download {{count}} images...', { count: filteredImages.length }) });
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab.id) throw new Error("No active tab");
+      if (!tab.id) throw new Error(t('No active tab'));
 
       const urls = filteredImages.map(img => img.url);
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'DOWNLOAD_PAGE_IMAGES', urls });
 
       if (response && response.success) {
-        setStatus({ type: 'loading', message: `Downloading ${response.count} images...` });
+        setStatus({ type: 'loading', message: t('Downloading {{count}} images...', { count: response.count }) });
       } else {
         setStatus({ type: 'error', message: response?.error || 'Failed to start download' });
       }
     } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Failed to download' });
+      setStatus({ type: 'error', message: err.message || t('Failed to download') });
     }
   };
 
@@ -474,7 +696,7 @@ const PageImagesView = () => {
     <div className="p-4 space-y-4">
       <h2 className="text-lg font-semibold flex items-center gap-2">
         <Image className="w-5 h-5 text-primary" />
-        Page Images
+        {t('Page Images')}
       </h2>
 
       <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-4">
@@ -485,18 +707,18 @@ const PageImagesView = () => {
           className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {status.type === 'scanning' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-          {status.type === 'scanning' ? 'Scanning...' : 'Scan Page for Images'}
+          {status.type === 'scanning' ? t('Scanning...') : t('Scan Page for Images')}
         </button>
 
         {/* Dimension filters */}
         {images.length > 0 && (
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">
-              Filter by minimum dimensions:
+              {t('Filter by minimum dimensions:')}
             </div>
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="text-xs text-muted-foreground">Min Width</label>
+                <label className="text-xs text-muted-foreground">{t('Min Width')}</label>
                 <input
                   type="number"
                   value={minWidth}
@@ -506,7 +728,7 @@ const PageImagesView = () => {
                 />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-muted-foreground">Min Height</label>
+                <label className="text-xs text-muted-foreground">{t('Min Height')}</label>
                 <input
                   type="number"
                   value={minHeight}
@@ -518,8 +740,7 @@ const PageImagesView = () => {
             </div>
 
             <div className="text-sm">
-              <span className="font-medium">{filteredImages.length}</span>
-              <span className="text-muted-foreground"> of {images.length} images match filter</span>
+              <span className="text-muted-foreground">{t('{{filtered}} of {{total}} images match filter', { filtered: filteredImages.length, total: images.length })}</span>
             </div>
 
             {/* Download button */}
@@ -529,7 +750,7 @@ const PageImagesView = () => {
               className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
             >
               {status.type === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {status.type === 'loading' ? 'Downloading...' : `Download ${filteredImages.length} Images`}
+              {status.type === 'loading' ? t('Downloading...') : t('Download {{count}} Images', { count: filteredImages.length })}
             </button>
           </div>
         )}
@@ -564,6 +785,7 @@ const PageImagesView = () => {
 }
 
 const WeiboView = () => {
+  const { t } = useI18n();
   const [isScraping, setIsScraping] = useState(false);
   const [limit, setLimit] = useState(0);
   const [posts, setPosts] = useState<WeiboPost[]>([]);
@@ -618,7 +840,7 @@ const WeiboView = () => {
       setElapsed('0m 0s');
     } catch (e: any) {
       console.error(e);
-      alert(`Failed to start: ${e.message || e}. \n\nPlease refresh the Weibo page and try again.`);
+      alert(`${t('Failed to start. Please refresh the Weibo page and try again.')}\n\n${e.message || e}`);
     }
   };
 
@@ -634,7 +856,7 @@ const WeiboView = () => {
   };
 
   const clearData = () => {
-    if (confirm('Clear all scraped data?')) {
+    if (confirm(t('Clear all scraped data?'))) {
       setPosts([]);
       setElapsed('0m 0s');
       setStartTime(null);
@@ -710,19 +932,19 @@ const WeiboView = () => {
                 onClick={handleStart}
                 className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
               >
-                <Play className="w-4 h-4" /> Start
+                <Play className="w-4 h-4" /> {t('Start')}
               </button>
             ) : (
               <button
                 onClick={handleStop}
                 className="flex-1 flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 rounded-md hover:bg-destructive/90 transition-colors"
               >
-                <Square className="w-4 h-4 fill-current" /> Stop
+                <Square className="w-4 h-4 fill-current" /> {t('Stop')}
               </button>
             )}
           </div>
           <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2 border">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{t('Limit')}:</span>
             <input
               type="number"
               value={limit}
@@ -734,8 +956,8 @@ const WeiboView = () => {
 
         {/* Status Display */}
         <div className="flex justify-between items-center text-xs text-muted-foreground">
-          <span>Scraped: <span className="font-medium text-foreground">{filteredPosts.length}</span> / {posts.length}</span>
-          <span>Time: <span className="font-mono">{elapsed}</span></span>
+          <span>{t('Scraped:')} <span className="font-medium text-foreground">{filteredPosts.length}</span> / {posts.length}</span>
+          <span>{t('Time:')} <span className="font-mono">{elapsed}</span></span>
         </div>
 
         {/* Progress */}
@@ -751,7 +973,7 @@ const WeiboView = () => {
         <div className="relative flex-1 min-w-[120px]">
           <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
-            placeholder="Filter..."
+            placeholder={t('Filter...')}
             value={filterKeyword}
             onChange={(e) => setFilterKeyword(e.target.value)}
             className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
@@ -765,7 +987,7 @@ const WeiboView = () => {
             onChange={(e) => setShowOriginalOnly(e.target.checked)}
             className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
           />
-          Original
+          {t('Original')}
         </label>
 
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
@@ -775,7 +997,7 @@ const WeiboView = () => {
             onChange={(e) => setHideEmptyContent(e.target.checked)}
             className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
           />
-          No Empty
+          {t('No Empty')}
         </label>
 
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
@@ -785,7 +1007,7 @@ const WeiboView = () => {
             onChange={(e) => setHideImagesOnly(e.target.checked)}
             className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
           />
-          No Img-Only
+          {t('No Img-Only')}
         </label>
 
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
@@ -795,7 +1017,7 @@ const WeiboView = () => {
             onChange={(e) => setHideVideosOnly(e.target.checked)}
             className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
           />
-          No Vid-Only
+          {t('No Vid-Only')}
         </label>
 
         <div className="h-4 w-px bg-border mx-1"></div>
@@ -803,14 +1025,14 @@ const WeiboView = () => {
         <button
           onClick={() => setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')}
           className="p-1.5 hover:bg-muted rounded text-muted-foreground"
-          title="Sort Order"
+          title={t('Sort Order')}
         >
           <ArrowUpDown className={cn("w-4 h-4", sortOrder === 'oldest' && "rotate-180")} />
         </button>
         <button
           onClick={clearData}
           className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded text-muted-foreground"
-          title="Clear Data"
+          title={t('Clear Data')}
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -830,7 +1052,7 @@ const WeiboView = () => {
         ))}
         {posts.length === 0 && (
           <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
-            No data. Open a Weibo user page and click Start.
+            {t('No data. Open a Weibo user page and click Start.')}
           </div>
         )}
       </div>
@@ -851,6 +1073,7 @@ const WeiboView = () => {
 }
 
 const DoubanView = () => {
+  const { t } = useI18n();
   const [username, setUsername] = useState('renjiananhuo');
   const [isScraping, setIsScraping] = useState(false);
   const [limit, setLimit] = useState(0);
@@ -1014,7 +1237,7 @@ const DoubanView = () => {
   };
 
   const handleStartCurrent = async () => {
-    if (!username) return alert('Please enter a username');
+    if (!username) return alert(t('Please enter a username'));
     stopRequestedRef.current = false;
 
     // Find index of active tab
@@ -1045,7 +1268,7 @@ const DoubanView = () => {
   };
 
   const handleStartAll = async () => {
-    if (!username) return alert('Please enter a username');
+    if (!username) return alert(t('Please enter a username'));
     stopRequestedRef.current = false;
 
     const updatedTasks = tasks.map((t, i) => ({ ...t, status: i === 0 ? 'running' as const : 'idle' as const }));
@@ -1098,7 +1321,7 @@ const DoubanView = () => {
   };
 
   const clearData = () => {
-    if (confirm('Clear all scraped data?')) {
+    if (confirm(t('Clear all scraped data?'))) {
       setItems([]);
       setElapsed('0m 0s');
       setStartTime(null);
@@ -1144,7 +1367,7 @@ const DoubanView = () => {
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <input
-              placeholder="Douban Username (e.g. renjiananhuo)"
+              placeholder={t('Douban Username (e.g. renjiananhuo)')}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={isScraping}
@@ -1152,7 +1375,7 @@ const DoubanView = () => {
             />
           </div>
           <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-1.5 border shrink-0">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Limit:</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{t('Limit')}:</span>
             <input
               type="number"
               value={limit}
@@ -1170,13 +1393,13 @@ const DoubanView = () => {
                 onClick={handleStartCurrent}
                 className="flex-1 flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-3 py-2 text-sm rounded-md hover:bg-secondary/80 transition-colors"
               >
-                <Play className="w-3.5 h-3.5" /> Start Current
+                <Play className="w-3.5 h-3.5" /> {t('Start Current')}
               </button>
               <button
                 onClick={handleStartAll}
                 className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground px-3 py-2 text-sm rounded-md hover:bg-primary/90 transition-colors"
               >
-                <Play className="w-3.5 h-3.5" /> Start All
+                <Play className="w-3.5 h-3.5" /> {t('Start All')}
               </button>
             </>
           ) : (
@@ -1184,7 +1407,7 @@ const DoubanView = () => {
               onClick={handleStop}
               className="w-full flex items-center justify-center gap-2 bg-destructive text-destructive-foreground px-4 py-2 text-sm rounded-md hover:bg-destructive/90 transition-colors"
             >
-              <Square className="w-4 h-4 fill-current" /> Stop {isSequential ? 'Sequential' : ''} Scraping
+              <Square className="w-4 h-4 fill-current" /> {t('Stop')} {isSequential ? `${t('Sequential')} ` : ''}{t('Scraping')}
             </button>
           )}
         </div>
@@ -1193,30 +1416,30 @@ const DoubanView = () => {
         <div className="flex justify-between items-center text-xs pt-1 border-t">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1 text-primary font-medium">
-              {currentTabTask.name}: <span className="font-bold">{filteredItems.length}</span>
+              {t(currentTabTask.name)}: <span className="font-bold">{filteredItems.length}</span>
             </span>
             <span className="flex items-center gap-1 text-muted-foreground border-l pl-3">
-              Total Scraped: <span>{items.length}</span>
+              {t('Total Scraped:')} <span>{items.length}</span>
             </span>
           </div>
-          <span className="text-muted-foreground">Time: <span className="font-mono">{elapsed}</span></span>
+          <span className="text-muted-foreground">{t('Time:')} <span className="font-mono">{elapsed}</span></span>
         </div>
       </div>
 
       {/* Sub Tabs */}
       <div className="flex border-b bg-card text-xs shrink-0 overflow-x-auto">
-        {tasks.map(t => (
+        {tasks.map(task => (
           <button
-            key={t.id}
-            onClick={() => setActiveSubTab(t.id as any)}
+            key={task.id}
+            onClick={() => setActiveSubTab(task.id as any)}
             className={cn(
               "flex-1 py-2 px-1 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5",
-              activeSubTab === t.id ? "border-primary text-primary font-medium bg-primary/5" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              activeSubTab === task.id ? "border-primary text-primary font-medium bg-primary/5" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
             )}
           >
-            {t.name}
-            {t.status === 'running' && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-            {t.status === 'done' && <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="Completed" />}
+            {t(task.name)}
+            {task.status === 'running' && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+            {task.status === 'done' && <div className="w-1.5 h-1.5 rounded-full bg-green-500" title={t('Completed')} />}
           </button>
         ))}
       </div>
@@ -1225,7 +1448,7 @@ const DoubanView = () => {
         <div className="relative flex-1 min-w-[120px]">
           <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
-            placeholder={`Filter ${currentTabTask.name}...`}
+            placeholder={t('Filter {{name}}...', { name: t(currentTabTask.name) })}
             value={filterKeyword}
             onChange={(e) => setFilterKeyword(e.target.value)}
             className="w-full pl-8 pr-2 py-1.5 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
@@ -1234,7 +1457,7 @@ const DoubanView = () => {
         <button
           onClick={clearData}
           className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded text-muted-foreground"
-          title="Clear Data"
+          title={t('Clear Data')}
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -1244,7 +1467,7 @@ const DoubanView = () => {
         {filteredItems.map(item => (
           <div key={item.id} className="bg-card border rounded-lg p-3 text-sm shadow-sm space-y-2 relative">
             <div className="absolute right-3 top-3 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-              {item.type === 'book' ? 'Book' : 'Movie'}
+              {item.type === 'book' ? t('Book') : t('Movie')}
             </div>
             <div className="flex justify-between items-start pr-12">
               <a href={item.link} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline leading-tight">{item.title}</a>
@@ -1260,9 +1483,9 @@ const DoubanView = () => {
         ))}
         {items.filter(b => b.type === currentTabTask.type && b.status === currentTabTask.subStatus).length === 0 && (
           <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
-            No data for {currentTabTask.name}. <br />
-            {!isScraping && <span className="text-xs mt-2 block">Enter a username and start scraping to populate.</span>}
-            {isScraping && currentTabTask.status === 'running' && <span className="text-xs mt-2 block flex items-center justify-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Scraping...</span>}
+            {t('No data for {{name}}.', { name: t(currentTabTask.name) })} <br />
+            {!isScraping && <span className="text-xs mt-2 block">{t('Enter a username and start scraping to populate.')}</span>}
+            {isScraping && currentTabTask.status === 'running' && <span className="text-xs mt-2 block flex items-center justify-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> {t('Scraping')}...</span>}
           </div>
         )}
       </div>
@@ -1280,7 +1503,7 @@ const DoubanView = () => {
 
       {/* Scrolling Logs Panel */}
       <div className="h-32 bg-[#1e1e1e] text-green-400 font-mono text-[10px] p-2 overflow-y-auto shrink-0 border-t flex flex-col gap-1 items-start leading-tight">
-        {logs.length === 0 && <span className="text-muted-foreground italic">System Idle. Logs will appear here during scraping...</span>}
+        {logs.length === 0 && <span className="text-muted-foreground italic">{t('System Idle. Logs will appear here during scraping...')}</span>}
         {logs.map((log, i) => (
           <div key={i} className="flex gap-2 w-full">
             <span className="text-gray-500 shrink-0">[{log.time}]</span>
@@ -1294,6 +1517,7 @@ const DoubanView = () => {
 }
 
 const MarkdownView = () => {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ title: string, markdown: string, excerpt?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1305,10 +1529,10 @@ const MarkdownView = () => {
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab.id) throw new Error("No active tab");
+      if (!tab.id) throw new Error(t('No active tab'));
 
       if (tab.url?.startsWith("chrome://") || tab.url?.startsWith("edge://")) {
-        throw new Error("Cannot run on browser system pages.");
+        throw new Error(t('Cannot run on browser system pages.'));
       }
 
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'SCRAPE_MARKDOWN' });
@@ -1316,11 +1540,11 @@ const MarkdownView = () => {
       if (response && response.success) {
         setResult(response.data);
       } else {
-        setError(response?.error || "Unknown error occurred. Ensure page is loaded.");
+        setError(response?.error || t('Unknown error occurred. Ensure page is loaded.'));
       }
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Failed to communicate with page. Try reloading the page.");
+      setError(err instanceof Error ? err.message : t('Failed to communicate with page. Try reloading the page.'));
     } finally {
       setLoading(false);
     }
@@ -1350,7 +1574,7 @@ const MarkdownView = () => {
     <div className="flex flex-col h-full">
       <div className="p-4 space-y-4 shrink-0">
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          Page to Markdown
+          {t('Page to Markdown')}
           {loading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
         </h2>
 
@@ -1364,14 +1588,14 @@ const MarkdownView = () => {
         {!result && (
           <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm space-y-3">
             <p className="text-sm text-muted-foreground">
-              Convert the current main content to Markdown.
+              {t('Convert the current main content to Markdown.')}
             </p>
             <button
               onClick={handleConvert}
               disabled={loading}
               className="w-full px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-all"
             >
-              {loading ? 'Converting...' : 'Convert Current Page'}
+              {loading ? t('Converting...') : t('Convert Current Page')}
             </button>
           </div>
         )}
@@ -1384,14 +1608,14 @@ const MarkdownView = () => {
               {result.title}
             </div>
             <div className="flex gap-1">
-              <button onClick={handleCopy} className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground" title="Copy">
+              <button onClick={handleCopy} className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground" title={t('Copy')}>
                 <Copy className="w-4 h-4" />
               </button>
-              <button onClick={handleDownload} className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground" title="Download">
+              <button onClick={handleDownload} className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground" title={t('Download')}>
                 <Download className="w-4 h-4" />
               </button>
               <button onClick={() => setResult(null)} className="px-3 py-1 text-xs hover:underline text-muted-foreground">
-                Reset
+                {t('Reset')}
               </button>
             </div>
           </div>
@@ -1404,15 +1628,16 @@ const MarkdownView = () => {
   )
 }
 
-const YoutubeView = () => (
-  <div className="p-4 space-y-4">
-    <h2 className="text-lg font-semibold">YouTube Scraper</h2>
+const YoutubeView = () => {
+  const { t } = useI18n();
+  return <div className="p-4 space-y-4">
+    <h2 className="text-lg font-semibold">{t('YouTube Scraper')}</h2>
     <div className="p-8 border-2 border-dashed rounded-lg text-center">
       <Youtube className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-      <p className="text-sm text-muted-foreground">Functionality coming soon...</p>
+      <p className="text-sm text-muted-foreground">{t('Functionality coming soon...')}</p>
     </div>
   </div>
-)
+}
 
 const getInitialTabFromUrl = (url?: string) => {
   if (!url) return 'images';
@@ -1420,7 +1645,8 @@ const getInitialTabFromUrl = (url?: string) => {
     const hostname = new URL(url).hostname;
     if (hostname.includes('weibo.com')) return 'weibo';
     if (hostname.includes('douban.com')) return 'douban';
-    if (hostname.includes('gemini.google.com') || hostname.includes('chatgpt.com')) return 'gemini';
+    if (hostname.includes('chatgpt.com')) return 'chatgpt-export';
+    if (hostname.includes('gemini.google.com')) return 'gemini';
   } catch {
     return 'images';
   }
@@ -1429,6 +1655,12 @@ const getInitialTabFromUrl = (url?: string) => {
 
 function App() {
   const [activeTab, setActiveTab] = useState('images')
+  const [locale, setLocale] = useState<Locale>('en')
+  const t = (key: string, values?: Record<string, string | number>) => translate(locale, key, values)
+  const changeLocale = (nextLocale: Locale) => {
+    setLocale(nextLocale)
+    chrome.storage.local.set({ sidepanelLocale: nextLocale }).catch(() => {})
+  }
 
   useEffect(() => {
     if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
@@ -1441,7 +1673,14 @@ function App() {
       .catch(() => setActiveTab('images'));
   }, []);
 
+  useEffect(() => {
+    chrome.storage.local.get('sidepanelLocale').then(data => {
+      if (data.sidepanelLocale === 'en' || data.sidepanelLocale === 'zh') setLocale(data.sidepanelLocale)
+    }).catch(() => {})
+  }, []);
+
   return (
+    <I18nContext.Provider value={{ locale, t }}>
     <div className="w-full h-screen bg-background text-foreground flex flex-col font-sans">
       {/* <header className="px-4 py-3 border-b flex items-center gap-2 bg-card shrink-0">
         <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold text-xs">
@@ -1461,10 +1700,13 @@ function App() {
           Markdown
         </TabTrigger>
         <TabTrigger id="gemini" active={activeTab} onClick={setActiveTab} icon={Image}>
-          AI Images
+          {t('AI Images')}
         </TabTrigger>
         <TabTrigger id="images" active={activeTab} onClick={setActiveTab} icon={Download}>
-          Images
+          {t('Images')}
+        </TabTrigger>
+        <TabTrigger id="chatgpt-export" active={activeTab} onClick={setActiveTab} icon={Archive}>
+          {t('Chat Export')}
         </TabTrigger>
       </Tabs>
 
@@ -1475,16 +1717,23 @@ function App() {
         {activeTab === 'youtube' && <YoutubeView />}
         {activeTab === 'gemini' && <AiImagesView />}
         {activeTab === 'images' && <PageImagesView />}
+        {activeTab === 'chatgpt-export' && <ChatGPTExportView />}
       </main>
 
       {/* Build version footer */}
       <footer
-        className="px-4 py-1 border-t bg-muted/20 text-xs text-muted-foreground text-center shrink-0"
+        className="px-3 py-1 border-t bg-muted/20 text-xs text-muted-foreground flex items-center justify-between shrink-0"
         title={`Build timestamp: ${__BUILD_TIMESTAMP__}`}
       >
-        构建时间: {formatBuildTimestamp(__BUILD_TIMESTAMP__)}
+        <span>{t('Build time: {{time}}', { time: formatBuildTimestamp(__BUILD_TIMESTAMP__) })}</span>
+        <div className="flex items-center rounded border bg-background p-0.5" aria-label="Language">
+          <Languages className="mx-1 w-3 h-3" />
+          <button type="button" onClick={() => changeLocale('en')} className={cn('px-1.5 py-0.5 rounded', locale === 'en' && 'bg-primary text-primary-foreground')}>EN</button>
+          <button type="button" onClick={() => changeLocale('zh')} className={cn('px-1.5 py-0.5 rounded', locale === 'zh' && 'bg-primary text-primary-foreground')}>中文</button>
+        </div>
       </footer>
     </div>
+    </I18nContext.Provider>
   )
 }
 
