@@ -1,5 +1,9 @@
 # Scrape to Markdown Chrome Extension
 
+
+![Screenshot](./screenshot.png)
+
+
 A Chrome side-panel extension for saving web content as Markdown, exporting social reading data, and downloading images from AI tools or regular webpages.
 
 一个 Chrome 侧边栏扩展，用于网页转 Markdown、社交内容导出，以及批量下载 AI 图片和网页图片。
