@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "scrape-to-markdown-chrome",
+  "compatibility_date": "2026-09-03",
+  "assets": {
+    "directory": "./dist"
+  },
+  "routes": [
+    {
+      "pattern": "scrape-to-markdown-chrome.xiaosang.cc",
+      "custom_domain": true
+    }
+  ]
+}
