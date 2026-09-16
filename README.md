@@ -3,6 +3,11 @@
 
 A Chrome side-panel extension for saving web content as Markdown, exporting social reading data, and downloading images from AI tools or regular webpages.
 
+<p align="center">
+  <img src="assets/readme/hero.svg" width="100%" alt="Scrape to Markdown Chrome Extension: A Chrome side-panel extension for saving web content as Markdown, exporting social reading data, and downloading images from AI tools or regular webpages.">
+</p>
+
+
 一个 Chrome 侧边栏扩展，用于网页转 Markdown、社交内容导出，以及批量下载 AI 图片和网页图片。
 
 ![Screenshot](./screenshot.png)
